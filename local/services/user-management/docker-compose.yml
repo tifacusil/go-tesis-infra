@@ -1,0 +1,37 @@
+name: svc-user-management
+
+# ─────────────────────────────────────────────────────────────────────────────
+# user-management — 1 instancia (Bai et al. 2020)
+# Puerto HTTP: 8089
+#
+# Dependencias externas:
+#   - mysql-user-management → mysql-user-management:3306
+#   - Consul                → consul-1:8500
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  landslide-net:
+    external: true
+    name: landslide-net
+
+services:
+
+  user-management-1:
+    image: ghcr.io/tifacusil/user-management:latest
+    container_name: user-management-1
+    hostname: user-management-1
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "8089:8080"
+    env_file: ../envs/user-management.env
+    environment:
+      INSTANCE_ID: user-management-01
+      HTTP_PORT: "8080"
+    init: true
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 20s

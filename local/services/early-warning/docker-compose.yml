@@ -1,0 +1,66 @@
+name: svc-early-warning
+
+# ─────────────────────────────────────────────────────────────────────────────
+# early-warning — 2 instancias (Bai et al. 2020)
+# Puerto HTTP: 8087/8088
+#
+# Dependencias externas:
+#   - RabbitMQ         → rabbitmq-1:5672  (cola early_warning.evaluate)
+#   - mysql-early-warning → mysql-early-warning:3306
+#   - data-analysis    → data-analysis-1:8080 (HTTP, con circuit breaker)
+#   - Consul           → consul-1:8500
+#
+# IMPORTANTE: si data-analysis no está disponible, early-warning
+# debe seguir emitiendo alarmas por umbral simple (degradación aceptable).
+# Ver CLAUDE.md sección 2.3 — circuit breaker obligatorio.
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  landslide-net:
+    external: true
+    name: landslide-net
+
+services:
+
+  early-warning-1:
+    image: ghcr.io/tifacusil/early-warning:latest
+    container_name: early-warning-1
+    hostname: early-warning-1
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "8087:8080"
+    env_file: ../envs/early-warning.env
+    environment:
+      INSTANCE_ID: early-warning-01
+      HTTP_PORT: "8080"
+    init: true
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 20s
+
+  early-warning-2:
+    image: ghcr.io/tifacusil/early-warning:latest
+    container_name: early-warning-2
+    hostname: early-warning-2
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "8088:8080"
+    env_file: ../envs/early-warning.env
+    environment:
+      INSTANCE_ID: early-warning-02
+      HTTP_PORT: "8080"
+    init: true
+    depends_on:
+      early-warning-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 20s

@@ -1,0 +1,61 @@
+name: svc-data-management
+
+# ─────────────────────────────────────────────────────────────────────────────
+# data-management — 2 instancias (Bai et al. 2020)
+# Puerto HTTP: 8083/8084 (REST API + /health + /metrics)
+#
+# Dependencias externas:
+#   - RabbitMQ           → rabbitmq-1:5672  (cola data_management.persist)
+#   - mysql-data-management → mysql-data-management:3306
+#   - Consul             → consul-1:8500
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  landslide-net:
+    external: true
+    name: landslide-net
+
+services:
+
+  data-management-1:
+    image: ghcr.io/tifacusil/data-management:latest
+    container_name: data-management-1
+    hostname: data-management-1
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "8083:8080"
+    env_file: ../envs/data-management.env
+    environment:
+      INSTANCE_ID: data-management-01
+      HTTP_PORT: "8080"
+    init: true
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 20s
+
+  data-management-2:
+    image: ghcr.io/tifacusil/data-management:latest
+    container_name: data-management-2
+    hostname: data-management-2
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "8084:8080"
+    env_file: ../envs/data-management.env
+    environment:
+      INSTANCE_ID: data-management-02
+      HTTP_PORT: "8080"
+    init: true
+    depends_on:
+      data-management-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 20s
