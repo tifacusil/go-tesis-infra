@@ -1,0 +1,139 @@
+.PHONY: infra-up infra-down infra-reset \
+        svc-up svc-down svc-logs svc-build \
+        all-svc-up all-svc-down \
+        all-up all-down \
+        status ping help
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Makefile raíz — Sistema de monitoreo de deslizamientos
+# Orquesta infraestructura y microservicios en local/
+#
+# Uso rápido:
+#   make all-up                     # levanta infra + todos los servicios
+#   make svc-up SVC=data-receiving  # levanta un servicio específico
+#   make svc-logs SVC=early-warning # logs de un servicio
+#   make all-down                   # baja todo
+# ─────────────────────────────────────────────────────────────────────────────
+
+INFRA_DIR    = local/infra
+SERVICES_DIR = local/services
+
+SERVICES = data-receiving \
+           data-management \
+           data-analysis \
+           early-warning \
+           user-management \
+           project-management
+
+# ── Infraestructura ───────────────────────────────────────────────────────────
+
+infra-up:
+	@echo "→ Levantando infraestructura..."
+	$(MAKE) -C $(INFRA_DIR) up
+
+infra-down:
+	@echo "→ Bajando infraestructura..."
+	$(MAKE) -C $(INFRA_DIR) down
+
+infra-reset:
+	$(MAKE) -C $(INFRA_DIR) reset
+
+# ── Un microservicio ──────────────────────────────────────────────────────────
+# Uso: make svc-up SVC=data-receiving
+
+svc-up:
+	@test -n "$(SVC)" || (echo "❌ Falta SVC. Ejemplo: make svc-up SVC=data-receiving" && exit 1)
+	@echo "→ Levantando $(SVC)..."
+	docker compose -f $(SERVICES_DIR)/$(SVC)/docker-compose.yml up -d --build
+
+svc-down:
+	@test -n "$(SVC)" || (echo "❌ Falta SVC. Ejemplo: make svc-down SVC=data-receiving" && exit 1)
+	docker compose -f $(SERVICES_DIR)/$(SVC)/docker-compose.yml down
+
+svc-logs:
+	@test -n "$(SVC)" || (echo "❌ Falta SVC. Ejemplo: make svc-logs SVC=data-receiving" && exit 1)
+	docker compose -f $(SERVICES_DIR)/$(SVC)/docker-compose.yml logs -f
+
+svc-build:
+	@test -n "$(SVC)" || (echo "❌ Falta SVC. Ejemplo: make svc-build SVC=data-receiving" && exit 1)
+	docker compose -f $(SERVICES_DIR)/$(SVC)/docker-compose.yml build
+
+# ── Todos los microservicios ──────────────────────────────────────────────────
+
+all-svc-up:
+	@echo "→ Levantando todos los microservicios..."
+	@for svc in $(SERVICES); do \
+		echo "  → $$svc"; \
+		docker compose -f $(SERVICES_DIR)/$$svc/docker-compose.yml up -d --build; \
+	done
+	@echo "✅ Todos los microservicios levantados."
+
+all-svc-down:
+	@echo "→ Bajando todos los microservicios..."
+	@for svc in $(SERVICES); do \
+		docker compose -f $(SERVICES_DIR)/$$svc/docker-compose.yml down; \
+	done
+
+# ── Todo junto ────────────────────────────────────────────────────────────────
+
+all-up: infra-up all-svc-up
+	@echo ""
+	@echo "✅ Sistema completo levantado."
+	@echo "   Consul UI:       http://localhost:8500"
+	@echo "   RabbitMQ UI:     http://localhost:15672"
+	@echo "   Nginx/API GW:    http://localhost:80"
+	@echo ""
+	@echo "   Puertos de microservicios:"
+	@echo "   data-receiving   TCP: 5000-5002  HTTP: 8080-8082"
+	@echo "   data-management  HTTP: 8083-8084"
+	@echo "   data-analysis    HTTP: 8085-8086"
+	@echo "   early-warning    HTTP: 8087-8088"
+	@echo "   user-management  HTTP: 8089"
+	@echo "   project-mgmt     HTTP: 8090"
+
+all-down: all-svc-down infra-down
+	@echo "✅ Sistema completo bajado."
+
+# ── Utilidades ────────────────────────────────────────────────────────────────
+
+status:
+	@echo "=== Infraestructura ==="
+	@docker ps --filter "name=consul-1|rabbitmq-1|redis|mysql-|nginx" \
+		--format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
+	@echo ""
+	@echo "=== Microservicios ==="
+	@docker ps --filter "name=data-receiving|data-management|data-analysis|early-warning|user-management|project-management" \
+		--format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
+
+ping:
+	$(MAKE) -C $(INFRA_DIR) ping
+	@echo ""
+	@echo "=== Microservicios ==="
+	@for port in 8080 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090; do \
+		nc -z -w1 localhost $$port 2>/dev/null \
+			&& echo "✓ localhost:$$port OK" \
+			|| echo "✗ localhost:$$port no responde"; \
+	done
+
+help:
+	@echo "Comandos disponibles:"
+	@echo ""
+	@echo "  make infra-up                     Levanta Consul, RabbitMQ, Redis, MySQL x4, Nginx"
+	@echo "  make infra-down                   Baja la infraestructura"
+	@echo "  make infra-reset                  Reset total (borra volúmenes)"
+	@echo ""
+	@echo "  make svc-up SVC=<nombre>          Levanta un microservicio"
+	@echo "  make svc-down SVC=<nombre>        Baja un microservicio"
+	@echo "  make svc-logs SVC=<nombre>        Logs en tiempo real de un microservicio"
+	@echo "  make svc-build SVC=<nombre>       Reconstruye la imagen de un microservicio"
+	@echo ""
+	@echo "  make all-svc-up                   Levanta todos los microservicios"
+	@echo "  make all-svc-down                 Baja todos los microservicios"
+	@echo ""
+	@echo "  make all-up                       Levanta infra + todos los microservicios"
+	@echo "  make all-down                     Baja todo"
+	@echo ""
+	@echo "  make status                       Estado de todos los contenedores"
+	@echo "  make ping                         Verifica conectividad de puertos"
+	@echo ""
+	@echo "Servicios disponibles: $(SERVICES)"

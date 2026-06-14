@@ -1,0 +1,11 @@
+# Ignorar todo .env dentro de cualquier carpeta envs/
+**/envs/**/*.env
+
+# Excepto .env.example
+!**/envs/**/*.env.example
+
+# Datos de volúmenes (bind mounts) — generados al levantar docker compose
+**/consul-data-1/
+**/rabbitmq-data-1/
+**/redis-data/
+**/mysql-data/
