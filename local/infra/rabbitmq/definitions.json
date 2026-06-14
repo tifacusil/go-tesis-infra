@@ -1,0 +1,162 @@
+{
+  "rabbit_version": "4.3.1",
+  "users": [
+    {
+      "name": "admin",
+      "password_hash": "",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": ["administrator"],
+      "limits": {}
+    },
+    {
+      "name": "data_receiving",
+      "password_hash": "",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [],
+      "limits": {}
+    },
+    {
+      "name": "data_management",
+      "password_hash": "",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [],
+      "limits": {}
+    },
+    {
+      "name": "early_warning",
+      "password_hash": "",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [],
+      "limits": {}
+    },
+    {
+      "name": "dlq_inspector",
+      "password_hash": "",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [],
+      "limits": {}
+    }
+  ],
+  "vhosts": [
+    { "name": "/" }
+  ],
+  "permissions": [
+    {
+      "user": "admin",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "data_receiving",
+      "vhost": "/",
+      "configure": "",
+      "write": "sensors\\.raw",
+      "read": ""
+    },
+    {
+      "user": "data_management",
+      "vhost": "/",
+      "configure": "data_management\\..*",
+      "write": "",
+      "read": "data_management\\..*"
+    },
+    {
+      "user": "early_warning",
+      "vhost": "/",
+      "configure": "early_warning\\..*",
+      "write": "",
+      "read": "early_warning\\..*"
+    },
+    {
+      "user": "dlq_inspector",
+      "vhost": "/",
+      "configure": "",
+      "write": "",
+      "read": "sensors\\.dead_letter"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "sensors.raw",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "sensors.dlx",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "data_management.persist",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "sensors.dlx",
+        "x-message-ttl": 86400000,
+        "x-max-length": 1000000,
+        "x-queue-type": "classic"
+      }
+    },
+    {
+      "name": "early_warning.evaluate",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "sensors.dlx",
+        "x-message-ttl": 86400000,
+        "x-max-length": 1000000,
+        "x-queue-type": "classic"
+      }
+    },
+    {
+      "name": "sensors.dead_letter",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "sensors.raw",
+      "vhost": "/",
+      "destination": "data_management.persist",
+      "destination_type": "queue",
+      "routing_key": "sensors.#",
+      "arguments": {}
+    },
+    {
+      "source": "sensors.raw",
+      "vhost": "/",
+      "destination": "early_warning.evaluate",
+      "destination_type": "queue",
+      "routing_key": "sensors.#",
+      "arguments": {}
+    },
+    {
+      "source": "sensors.dlx",
+      "vhost": "/",
+      "destination": "sensors.dead_letter",
+      "destination_type": "queue",
+      "routing_key": "#",
+      "arguments": {}
+    }
+  ],
+  "policies": []
+}

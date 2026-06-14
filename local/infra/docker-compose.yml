@@ -1,0 +1,214 @@
+name: landslide-infra
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Infraestructura base para el nuevo sistema de monitoreo de deslizamientos basado de Bai et al. 2020
+# Levanta: Consul · RabbitMQ · Redis · MySQL (7 para cada servicio) · Nginx
+#
+# Uso:
+#   docker compose up -d              # levantar todo
+#   docker compose down               # bajar sin borrar datos
+#   docker compose down -v            # bajar y borrar volúmenes (reset total)
+#
+# Los microservicios se levantan por separado desde su propio compose,
+# uniéndose a la red externa "landslide-net" que este archivo crea.
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  landslide-net:
+    name: landslide-net
+    driver: bridge
+
+services:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # CONSUL
+  # UI disponible en http://localhost:8500
+  # ───────────────────────────────────────────────────────────────────────────
+  consul-1:
+    image: hashicorp/consul:2.0.0
+    container_name: consul-1
+    hostname: consul-1
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "8500:8500"    # HTTP UI + API
+      - "8600:8600/udp" # DNS
+    volumes:
+      - ./consul-data-1:/consul/data
+      - ./consul/config.json:/consul/config/config.json:ro
+    command: >
+      consul agent -server
+        -node=consul-1
+        -bind=0.0.0.0
+        -client=0.0.0.0
+        -advertise=consul-1
+        -bootstrap
+        -data-dir=/consul/data
+        -config-file=/consul/config/config.json
+        -ui
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # RABBITMQ
+  # Management UI en http://localhost:15672  (user: admin / pass: ver .env)
+  # La topología (exchanges, colas, DLX) se pre-declara via definitions.json
+  # ───────────────────────────────────────────────────────────────────────────
+  rabbitmq-1:
+    image: rabbitmq:4.3.1-management-alpine
+    container_name: rabbitmq-1
+    hostname: rabbitmq-1
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
+    env_file: ./envs/rabbitmq.env
+    volumes:
+      - ./rabbitmq-data-1:/var/lib/rabbitmq
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 6
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # REDIS — primary con persistencia AOF
+  # Política allkeys-lru, prefijo sensor_buffer:{message_id}
+  # ───────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:8.8.0-alpine
+    container_name: redis
+    hostname: redis
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "6379:6379"
+    env_file: ./envs/redis.env
+    command: >
+      redis-server
+        --requirepass ${REDIS_PASSWORD}
+        --appendonly yes
+        --appendfsync everysec
+        --maxmemory 512mb
+        --maxmemory-policy allkeys-lru
+        --save 900 1
+        --save 300 10
+    volumes:
+      - ./redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ───────────────────────────────────────────────────────────────────────────
+  # MYSQL — un contenedor por servicio (database-per-service)
+  # Cada BD tiene sus propios scripts de init y volumen independiente
+  # Puertos externos distintos para acceso local
+  # ───────────────────────────────────────────────────────────────────────────
+
+  mysql-data-management:
+    image: mysql:9.7.0
+    container_name: mysql-data-management
+    hostname: mysql-data-management
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "3306:3306"
+    env_file: ./envs/mysql-data-management.env
+    volumes:
+      - ./mysql-data/data-management:/var/lib/mysql
+      - ./mysql/data-management/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 15s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+
+  mysql-user-management:
+    image: mysql:9.7.0
+    container_name: mysql-user-management
+    hostname: mysql-user-management
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "3307:3306"
+    env_file: ./envs/mysql-user-management.env
+    volumes:
+      - ./mysql-data/user-management:/var/lib/mysql
+      - ./mysql/user-management/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 15s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+
+  mysql-project-management:
+    image: mysql:9.7.0
+    container_name: mysql-project-management
+    hostname: mysql-project-management
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "3308:3306"
+    env_file: ./envs/mysql-project-management.env
+    volumes:
+      - ./mysql-data/project-management:/var/lib/mysql
+      - ./mysql/project-management/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 15s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+
+  mysql-early-warning:
+    image: mysql:9.7.0
+    container_name: mysql-early-warning
+    hostname: mysql-early-warning
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "3309:3306"
+    env_file: ./envs/mysql-early-warning.env
+    volumes:
+      - ./mysql-data/early-warning:/var/lib/mysql
+      - ./mysql/early-warning/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 15s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # NGINX — API Gateway + load balancer
+  # En local usa una config estática (no consul-template, para simplificar)
+  # Los microservicios se agregan manualmente a nginx/nginx.conf
+  # ───────────────────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.31.1-alpine3.23
+    container_name: nginx
+    hostname: nginx
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      consul-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

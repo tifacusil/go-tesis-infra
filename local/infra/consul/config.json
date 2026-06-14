@@ -1,0 +1,27 @@
+{
+  "datacenter": "dc1",
+  "log_level": "INFO",
+  "log_json": true,
+
+  "connect": {
+    "enabled": false
+  },
+
+  "ports": {
+    "http": 8500,
+    "dns": 8600
+  },
+
+  "performance": {
+    "raft_multiplier": 1
+  },
+
+  "acl": {
+    "enabled": false,
+    "default_policy": "allow"
+  },
+
+  "telemetry": {
+    "disable_hostname": true
+  }
+}
