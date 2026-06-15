@@ -15,10 +15,10 @@ local/
 │   │   ├── definitions.json            # exchanges, colas, DLX, usuarios, permisos
 │   │   └── rabbitmq.conf
 │   ├── mysql/
-│   │   ├── data-management/init/       # schema + tablas de lecturas de sensores
-│   │   ├── user-management/init/       # schema + tablas de usuarios y roles
-│   │   ├── project-management/init/    # schema + tablas de proyectos y sensores
-│   │   └── early-warning/init/         # schema + tablas de alertas y umbrales
+│   │   ├── data-management/init/       # 00_schema.sql: crea BD + usuarios + grants (sin tablas)
+│   │   ├── user-management/init/       # 00_schema.sql: crea BD + usuarios + grants (sin tablas)
+│   │   ├── project-management/init/    # 00_schema.sql: crea BD + usuarios + grants (sin tablas)
+│   │   └── early-warning/init/         # 00_schema.sql: crea BD + usuarios + grants (sin tablas)
 │   ├── nginx/
 │   │   └── nginx.conf                  # API Gateway estático
 │   └── envs/                           # credenciales de infraestructura (NO commitear)
@@ -152,6 +152,12 @@ Cada microservicio tiene su propio contenedor MySQL (database-per-service):
 
 `data-analysis` no tiene BD propia — lee de `mysql-data-management` con usuario de solo lectura.
 `data-receiving` no tiene BD propia — usa Redis como buffer temporal.
+
+### Inicialización y migraciones
+
+Los scripts en `mysql/<svc>/init/` solo crean la **base de datos**, los **usuarios** de servicio y sus **grants** (privilegios mínimos: DML). **No crean tablas.**
+
+La creación y evolución del esquema (tablas, índices, particiones) es responsabilidad de cada microservicio vía sus **migraciones**. Como los usuarios de servicio `svc_*` solo tienen permisos DML (`SELECT/INSERT/UPDATE/DELETE`), las migraciones se ejecutan con **root** (`MYSQL_ROOT_PASSWORD`), no con el usuario de servicio.
 
 ## Red Docker
 
