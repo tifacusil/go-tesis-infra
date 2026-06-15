@@ -39,9 +39,8 @@ services:
     command: >
       consul agent -server
         -node=consul-1
-        -bind=0.0.0.0
+        -bind='{{ GetInterfaceIP "eth0" }}'
         -client=0.0.0.0
-        -advertise=consul-1
         -bootstrap
         -data-dir=/consul/data
         -config-file=/consul/config/config.json
@@ -90,19 +89,11 @@ services:
     ports:
       - "6379:6379"
     env_file: ./envs/redis.env
-    command: >
-      redis-server
-        --requirepass ${REDIS_PASSWORD}
-        --appendonly yes
-        --appendfsync everysec
-        --maxmemory 512mb
-        --maxmemory-policy allkeys-lru
-        --save 900 1
-        --save 300 10
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes --appendfsync everysec --maxmemory 512mb --maxmemory-policy allkeys-lru --save 900 1 --save 300 10"]
     volumes:
       - ./redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -126,7 +117,7 @@ services:
       - ./mysql-data/data-management:/var/lib/mysql
       - ./mysql/data-management/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\""]
       interval: 15s
       timeout: 10s
       retries: 6
@@ -145,7 +136,7 @@ services:
       - ./mysql-data/user-management:/var/lib/mysql
       - ./mysql/user-management/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\""]
       interval: 15s
       timeout: 10s
       retries: 6
@@ -164,7 +155,7 @@ services:
       - ./mysql-data/project-management:/var/lib/mysql
       - ./mysql/project-management/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\""]
       interval: 15s
       timeout: 10s
       retries: 6
@@ -183,7 +174,7 @@ services:
       - ./mysql-data/early-warning:/var/lib/mysql
       - ./mysql/early-warning/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\""]
       interval: 15s
       timeout: 10s
       retries: 6
