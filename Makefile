@@ -28,11 +28,11 @@ SERVICES = data-receiving \
 # ── Infraestructura ───────────────────────────────────────────────────────────
 
 infra-up:
-	@echo "→ Levantando infraestructura..."
+	@echo "-> Levantando infraestructura..."
 	$(MAKE) -C $(INFRA_DIR) up
 
 infra-down:
-	@echo "→ Bajando infraestructura..."
+	@echo "-> Bajando infraestructura..."
 	$(MAKE) -C $(INFRA_DIR) down
 
 infra-reset:
@@ -43,7 +43,7 @@ infra-reset:
 
 svc-up:
 	@test -n "$(SVC)" || (echo "❌ Falta SVC. Ejemplo: make svc-up SVC=data-receiving" && exit 1)
-	@echo "→ Levantando $(SVC)..."
+	@echo "-> Levantando $(SVC)..."
 	docker compose -f $(SERVICES_DIR)/$(SVC)/docker-compose.yml up -d --build
 
 svc-down:
@@ -61,15 +61,15 @@ svc-build:
 # ── Todos los microservicios ──────────────────────────────────────────────────
 
 all-svc-up:
-	@echo "→ Levantando todos los microservicios..."
+	@echo "-> Levantando todos los microservicios..."
 	@for svc in $(SERVICES); do \
-		echo "  → $$svc"; \
+		echo "  -> $$svc"; \
 		docker compose -f $(SERVICES_DIR)/$$svc/docker-compose.yml up -d --build; \
 	done
-	@echo "✅ Todos los microservicios levantados."
+	@echo "[OK] Todos los microservicios levantados."
 
 all-svc-down:
-	@echo "→ Bajando todos los microservicios..."
+	@echo "-> Bajando todos los microservicios..."
 	@for svc in $(SERVICES); do \
 		docker compose -f $(SERVICES_DIR)/$$svc/docker-compose.yml down; \
 	done
@@ -78,7 +78,7 @@ all-svc-down:
 
 all-up: infra-up all-svc-up
 	@echo ""
-	@echo "✅ Sistema completo levantado."
+	@echo "[OK] Sistema completo levantado."
 	@echo "   Consul UI:       http://localhost:8500"
 	@echo "   RabbitMQ UI:     http://localhost:15672"
 	@echo "   Nginx/API GW:    http://localhost:80"
@@ -92,7 +92,7 @@ all-up: infra-up all-svc-up
 	@echo "   project-mgmt     HTTP: 8090"
 
 all-down: all-svc-down infra-down
-	@echo "✅ Sistema completo bajado."
+	@echo "[OK] Sistema completo bajado."
 
 # ── Utilidades ────────────────────────────────────────────────────────────────
 
@@ -111,8 +111,8 @@ ping:
 	@echo "=== Microservicios ==="
 	@for port in 8080 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090; do \
 		nc -z -w1 localhost $$port 2>/dev/null \
-			&& echo "✓ localhost:$$port OK" \
-			|| echo "✗ localhost:$$port no responde"; \
+			&& echo "[OK] localhost:$$port OK" \
+			|| echo "[FAIL] localhost:$$port no responde"; \
 	done
 
 help:
