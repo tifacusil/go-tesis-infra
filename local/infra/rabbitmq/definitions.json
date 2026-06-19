@@ -3,35 +3,35 @@
   "users": [
     {
       "name": "admin",
-      "password_hash": "",
+      "password_hash": "aN1be6CALl5wTqlJkprlu1Ba0kR38IQ7O6eNrVWzCtS1/GT4",
       "hashing_algorithm": "rabbit_password_hashing_sha256",
       "tags": ["administrator"],
       "limits": {}
     },
     {
       "name": "data_receiving",
-      "password_hash": "",
+      "password_hash": "6ARIKZEgodZ79Qe2u278I5QRehNcFlG/0nVgeTmIyfCfV/7y",
       "hashing_algorithm": "rabbit_password_hashing_sha256",
       "tags": [],
       "limits": {}
     },
     {
       "name": "data_management",
-      "password_hash": "",
+      "password_hash": "qj4nmwFI6szCeb65iszbhPD2BzGD4vNqe484UUtUGdOsNBDx",
       "hashing_algorithm": "rabbit_password_hashing_sha256",
       "tags": [],
       "limits": {}
     },
     {
       "name": "early_warning",
-      "password_hash": "",
+      "password_hash": "qkWdUb6Kf7Wu/AKPReWTvn31+AKxcRbVtjLMoKnIw0LgLTlR",
       "hashing_algorithm": "rabbit_password_hashing_sha256",
       "tags": [],
       "limits": {}
     },
     {
       "name": "dlq_inspector",
-      "password_hash": "",
+      "password_hash": "UrjiUuTG/iKBGFCF2MovIEKSUk7yXAByTZI4UY0eZl/xh2KZ",
       "hashing_algorithm": "rabbit_password_hashing_sha256",
       "tags": [],
       "limits": {}
