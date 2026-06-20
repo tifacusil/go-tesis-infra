@@ -3,13 +3,14 @@ name: svc-data-analysis
 # ─────────────────────────────────────────────────────────────────────────────
 # data-analysis — 2 instancias (Bai et al. 2020)
 # Stateless: no tiene BD propia.
-# Lee datos históricos de mysql-data-management vía usuario read-only
-# o vía HTTP API de data-management (ver env DATA_ACCESS_MODE).
-# Puerto HTTP: 8085/8086
+#
+# Puertos por instancia:
+#   HTTP  8085/8086 → :8080  (frontend vía Nginx)
+#   gRPC  50055/50056 → :50051 (server-to-server, e.g. early-warning-service)
 #
 # Dependencias externas:
-#   - mysql-data-management → mysql-data-management:3306 (solo lectura)
-#   - Consul                → consul-1:8500
+#   - Redis   → redis:6379      (caché de resultados)
+#   - Consul  → consul-1:8500   (service discovery)
 # ─────────────────────────────────────────────────────────────────────────────
 
 networks:
@@ -26,11 +27,13 @@ services:
     restart: unless-stopped
     networks: [landslide-net]
     ports:
-      - "8085:8080"
+      - "8085:8080"   # HTTP — proxied by Nginx
+      - "9085:50051"  # gRPC — local debug only; other services use data-analysis-1:50051
     env_file: ../envs/data-analysis.env
     environment:
-      INSTANCE_ID: data-analysis-01
-      HTTP_PORT: "8080"
+      ANALYSIS__INSTANCE_ID: data-analysis-01
+      ANALYSIS__HTTP_PORT: "8080"
+      ANALYSIS__GRPC_PORT: "50051"
     init: true
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -46,11 +49,13 @@ services:
     restart: unless-stopped
     networks: [landslide-net]
     ports:
-      - "8086:8080"
+      - "8086:8080"   # HTTP — proxied by Nginx
+      - "9086:50051"  # gRPC — local debug only; other services use data-analysis-2:50051
     env_file: ../envs/data-analysis.env
     environment:
-      INSTANCE_ID: data-analysis-02
-      HTTP_PORT: "8080"
+      ANALYSIS__INSTANCE_ID: data-analysis-02
+      ANALYSIS__HTTP_PORT: "8080"
+      ANALYSIS__GRPC_PORT: "50051"
     init: true
     depends_on:
       data-analysis-1:
