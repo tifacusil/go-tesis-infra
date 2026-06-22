@@ -181,25 +181,32 @@ services:
       start_period: 30s
 
   # ───────────────────────────────────────────────────────────────────────────
-  # NGINX — API Gateway + load balancer
-  # En local usa una config estática (no consul-template, para simplificar)
-  # Los microservicios se agregan manualmente a nginx/nginx.conf
+  # NGINX — API Gateway + load balancer (round-robin)
+  # consul-template regenera los upstreams desde el catálogo de salud de Consul
+  # y recarga nginx cuando una instancia se registra o cae. Balanceo round-robin
+  # (default de nginx) sobre las instancias sanas — estrategia de polling del
+  # paper (Bai et al. 2020).
   # ───────────────────────────────────────────────────────────────────────────
   nginx:
-    image: nginx:1.31.1-alpine3.23
+    build:
+      context: ./nginx
+    image: tesis-infra/gateway:latest
     container_name: nginx
     hostname: nginx
     restart: unless-stopped
     networks: [landslide-net]
     ports:
       - "80:80"
+    environment:
+      CONSUL_ADDR: consul-1:8500
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.conf.ctmpl:/etc/consul-template/nginx.conf.ctmpl:ro
+      - ./nginx/consul-template.hcl:/etc/consul-template/consul-template.hcl:ro
     depends_on:
       consul-1:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "nginx", "-t"]
+      test: ["CMD", "wget", "-qO-", "http://localhost/nginx-health"]
       interval: 30s
       timeout: 5s
       retries: 3

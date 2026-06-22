@@ -1,0 +1,162 @@
+{{/*
+  nginx.conf.ctmpl — plantilla consul-template para el API Gateway.
+
+  consul-template observa el catálogo de salud de Consul y regenera este
+  archivo cada vez que una instancia de un servicio se registra o cae,
+  recargando nginx. Los `upstream` se llenan SOLO con instancias que pasan
+  el health check en Consul; el balanceo es round-robin (default de nginx),
+  conforme a la estrategia de polling del paper (Bai et al. 2020).
+
+  Si un servicio no tiene instancias sanas, se emite un upstream con un
+  backend 127.0.0.1:1 (siempre caído) para que nginx valide la config y
+  devuelva 502 en vez de fallar al arrancar.
+*/}}
+
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+
+events {
+  worker_connections 1024;
+}
+
+http {
+  include       /etc/nginx/mime.types;
+  default_type  application/octet-stream;
+
+  log_format json_combined escape=json
+    '{'
+      '"time":"$time_iso8601",'
+      '"remote_addr":"$remote_addr",'
+      '"method":"$request_method",'
+      '"uri":"$request_uri",'
+      '"status":$status,'
+      '"bytes_sent":$bytes_sent,'
+      '"upstream":"$upstream_addr",'
+      '"request_time":$request_time,'
+      '"upstream_response_time":"$upstream_response_time"'
+    '}';
+
+  access_log /var/log/nginx/access.log json_combined;
+
+  sendfile on;
+  keepalive_timeout 65;
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Upstreams generados desde Consul (round-robin sobre instancias sanas).
+  # `range service "<n>"` itera SOLO las instancias que pasan el health
+  # check del servicio en Consul. Si no hay ninguna, un backend caído -> 502.
+  # ─────────────────────────────────────────────────────────────────────
+  upstream data-receiving_backend {
+  {{- range service "data-receiving"}}
+    server {{.Address}}:{{.Port}} max_fails=3 fail_timeout=10s;
+  {{- else}}
+    server 127.0.0.1:1;
+  {{- end}}
+  }
+
+  upstream data-management_backend {
+  {{- range service "data-management"}}
+    server {{.Address}}:{{.Port}} max_fails=3 fail_timeout=10s;
+  {{- else}}
+    server 127.0.0.1:1;
+  {{- end}}
+  }
+
+  upstream data-analysis_backend {
+  {{- range service "data-analysis"}}
+    server {{.Address}}:{{.Port}} max_fails=3 fail_timeout=10s;
+  {{- else}}
+    server 127.0.0.1:1;
+  {{- end}}
+  }
+
+  upstream early-warning_backend {
+  {{- range service "early-warning"}}
+    server {{.Address}}:{{.Port}} max_fails=3 fail_timeout=10s;
+  {{- else}}
+    server 127.0.0.1:1;
+  {{- end}}
+  }
+
+  upstream user-management_backend {
+  {{- range service "user-management"}}
+    server {{.Address}}:{{.Port}} max_fails=3 fail_timeout=10s;
+  {{- else}}
+    server 127.0.0.1:1;
+  {{- end}}
+  }
+
+  upstream project-management_backend {
+  {{- range service "project-management"}}
+    server {{.Address}}:{{.Port}} max_fails=3 fail_timeout=10s;
+  {{- else}}
+    server 127.0.0.1:1;
+  {{- end}}
+  }
+
+  server {
+    listen 80;
+    server_name localhost;
+
+    location /nginx-health {
+      access_log off;
+      return 200 '{"status":"ok"}';
+      add_header Content-Type application/json;
+    }
+
+    location /api/v1/receiving/ {
+      rewrite            ^/api/v1/receiving/(.*)$ /$1 break;
+      proxy_pass         http://data-receiving_backend;
+      proxy_set_header   Host $host;
+      proxy_set_header   X-Real-IP $remote_addr;
+      proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_read_timeout 30s;
+    }
+
+    location /api/v1/data/ {
+      rewrite            ^/api/v1/data/(.*)$ /$1 break;
+      proxy_pass         http://data-management_backend;
+      proxy_set_header   Host $host;
+      proxy_set_header   X-Real-IP $remote_addr;
+      proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_read_timeout 30s;
+    }
+
+    location /api/v1/analysis/ {
+      rewrite            ^/api/v1/analysis/(.*)$ /$1 break;
+      proxy_pass         http://data-analysis_backend;
+      proxy_set_header   Host $host;
+      proxy_set_header   X-Real-IP $remote_addr;
+      proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_read_timeout 60s;
+    }
+
+    location /api/v1/warnings/ {
+      rewrite            ^/api/v1/warnings/(.*)$ /$1 break;
+      proxy_pass         http://early-warning_backend;
+      proxy_set_header   Host $host;
+      proxy_set_header   X-Real-IP $remote_addr;
+      proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_read_timeout 30s;
+    }
+
+    # User Management — sin rewrite: el servicio enruta en /api/v1/users/...
+    location /api/v1/users/ {
+      proxy_pass         http://user-management_backend;
+      proxy_set_header   Host $host;
+      proxy_set_header   X-Real-IP $remote_addr;
+      proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_read_timeout 30s;
+    }
+
+    location /api/v1/projects/ {
+      rewrite            ^/api/v1/projects/(.*)$ /$1 break;
+      proxy_pass         http://project-management_backend;
+      proxy_set_header   Host $host;
+      proxy_set_header   X-Real-IP $remote_addr;
+      proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_read_timeout 30s;
+    }
+  }
+}
