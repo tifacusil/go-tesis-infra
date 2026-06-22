@@ -1,0 +1,7 @@
+# Scripts y plantillas que corren dentro de contenedores Linux: forzar LF.
+# CRLF rompe el shebang/`sh` y consul-template.
+*.sh        text eol=lf
+*.ctmpl     text eol=lf
+*.hcl       text eol=lf
+entrypoint.sh text eol=lf
+Dockerfile  text eol=lf
