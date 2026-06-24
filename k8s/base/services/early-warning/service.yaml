@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: early-warning
+  labels:
+    app: early-warning
+    tier: service
+spec:
+  selector:
+    app: early-warning
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

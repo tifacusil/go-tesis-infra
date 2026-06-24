@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: project-management-config
+  labels:
+    app: project-management
+data:
+  DB_HOST: "mysql-project-management"
+  DB_PORT: "3306"
+  DB_NAME: "project_management"
+  DB_USER: "root"
+  DB_ROOT_USER: "root"
+  DB_MAX_OPEN_CONNS: "25"
+  DB_MAX_IDLE_CONNS: "25"
+  GRPC_ADDR: ":9090"
+  HTTP_PORT: "8080"
+  HEALTH_PATH: "/health"
+  SERVICE_NAME: "project-management-service"
+  SERVICE_VERSION: "0.1.0"
+  # Consul deshabilitado: discovery vía Service K8s.
+  CONSUL_ENABLED: "false"
+  CONSUL_HOST: "consul-disabled"
+  CONSUL_PORT: "8500"
+  CONSUL_HEALTH_INTERVAL: "10s"
+  ENV: "prod"
+  LOG_LEVEL: "info"

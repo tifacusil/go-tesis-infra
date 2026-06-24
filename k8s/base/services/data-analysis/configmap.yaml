@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-analysis-config
+  labels:
+    app: data-analysis
+data:
+  # Bind normal (0.0.0.0): en K8s el discovery lo da el Service, no se necesita
+  # anunciar un hostname para el check de Consul.
+  ANALYSIS__HOST: "0.0.0.0"
+  ANALYSIS__HTTP_PORT: "8080"
+  ANALYSIS__GRPC_PORT: "50051"
+  # MySQL — réplica de lectura de data-management (usuario read-only).
+  MYSQL_HOST: "mysql-data-management"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "data_management"
+  MYSQL_USER: "svc_data_analysis_ro"
+  # Consul deshabilitado: el cliente Python intenta registrar pero el host no
+  # resuelve (discovery vía Service K8s). Los warnings de registro son benignos.
+  ANALYSIS__CONSUL__HOST: "consul-disabled"
+  ANALYSIS__CONSUL__PORT: "8500"
+  ENV: "prod"
+  LOG_LEVEL: "info"

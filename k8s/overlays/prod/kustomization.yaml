@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Todo en el namespace landslide.
+namespace: landslide
+
+resources:
+  - ../../base
+  # SealedSecret cifrados (generados con kubeseal; ver bootstrap/README.md).
+  # Se versionan cifrados; el controller sealed-secrets los descifra en el cluster.
+  - sealed-secrets
+
+# Aquí se ajustan réplicas / tags por entorno si difieren de la base.
+# Ejemplo (descomentar para fijar un tag inmutable en vez de :latest):
+# images:
+#   - name: ghcr.io/tifacusil/data-management
+#     newTag: sha-<commit>

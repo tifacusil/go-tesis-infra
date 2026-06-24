@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-management
+  labels:
+    app: data-management
+    tier: service
+spec:
+  # ClusterIP: balancea (round-robin) sobre las réplicas sanas. Reemplaza el
+  # upstream de nginx + consul-template del compose.
+  selector:
+    app: data-management
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

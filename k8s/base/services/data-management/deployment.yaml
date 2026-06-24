@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-management
+  labels:
+    app: data-management
+    tier: service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: data-management
+  template:
+    metadata:
+      labels:
+        app: data-management
+        tier: service
+    spec:
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: data-management
+          image: ghcr.io/tifacusil/data-management:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: data-management-config
+            - secretRef:
+                name: data-management
+          env:
+            # INSTANCE_ID único por pod (nombre del pod vía downward API).
+            - name: INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi

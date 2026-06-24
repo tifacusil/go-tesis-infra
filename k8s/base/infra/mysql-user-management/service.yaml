@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-user-management
+  labels:
+    app: mysql-user-management
+    tier: infra
+spec:
+  # Headless: identidad estable de pod (StatefulSet). DNS: mysql-user-management.
+  clusterIP: None
+  selector:
+    app: mysql-user-management
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306

@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - statefulset.yaml
+  - service.yaml
+
+# Topología (exchanges/colas/DLX/usuarios) + config base, reutilizadas del compose.
+configMapGenerator:
+  - name: rabbitmq-config
+    files:
+      - config/rabbitmq.conf
+      - config/definitions.json
+
+generatorOptions:
+  disableNameSuffixHash: true

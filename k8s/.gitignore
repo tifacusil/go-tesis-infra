@@ -1,0 +1,7 @@
+# Valores de secretos en claro — NUNCA versionar. Solo se versionan los
+# SealedSecret cifrados que produce kubeseal.
+bootstrap/secrets.env
+*.secrets.env
+
+# Backup de la clave privada del controller sealed-secrets.
+*sealed-secrets-key*.yaml

@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-receiving
+  labels:
+    app: data-receiving
+    tier: service
+spec:
+  # HTTP interno (/health, /metrics, /docs) → lo expone el Ingress.
+  selector:
+    app: data-receiving
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-receiving-tcp
+  labels:
+    app: data-receiving
+    tier: service
+spec:
+  # Ingesta de frames de sensores: TCP crudo, NO pasa por el Ingress HTTP.
+  # LoadBalancer → en k3s (ServiceLB/Klipper) expone el puerto 5000 en la IP del VPS.
+  type: LoadBalancer
+  selector:
+    app: data-receiving
+  ports:
+    - name: tcp
+      port: 5000
+      targetPort: 5000

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: early-warning-config
+  labels:
+    app: early-warning
+data:
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: "early_warning"
+  RABBITMQ_QUEUE: "early_warning.evaluate"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  MYSQL_HOST: "mysql-early-warning"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "early_warning"
+  MYSQL_USER: "svc_early_warning"
+  # gRPC salientes → Service names K8s (balanceo por el Service).
+  DATA_ANALYSIS_GRPC: "data-analysis:50051"
+  DATA_ANALYSIS_TIMEOUT_MS: "5000"
+  USER_MANAGEMENT_GRPC: "user-management:9090"
+  USER_MANAGEMENT_TIMEOUT_MS: "5000"
+  CIRCUIT_BREAKER_FAILURE_THRESHOLD: "5"
+  CIRCUIT_BREAKER_RESET_TIMEOUT_MS: "30000"
+  # Consul deshabilitado (discovery vía Service K8s).
+  CONSUL_ENABLED: "false"
+  CONSUL_HOST: "consul-disabled"
+  CONSUL_PORT: "8500"
+  HTTP_PORT: "8080"
+  ENV: "prod"
+  LOG_LEVEL: "info"

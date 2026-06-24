@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-receiving
+  labels:
+    app: data-receiving
+    tier: service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: data-receiving
+  template:
+    metadata:
+      labels:
+        app: data-receiving
+        tier: service
+    spec:
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: data-receiving
+          image: ghcr.io/tifacusil/go-data-receiving:latest
+          ports:
+            - name: tcp
+              containerPort: 5000
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: data-receiving-config
+            - secretRef:
+                name: data-receiving
+          env:
+            - name: RECEIVER__CONSUL__INSTANCEID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          # Imagen distroless (sin shell): probe httpGet directo al puerto HTTP.
+          livenessProbe:
+            httpGet:
+              path: /health/
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health/
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi

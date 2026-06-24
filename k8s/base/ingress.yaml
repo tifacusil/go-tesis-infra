@@ -1,0 +1,100 @@
+# API Gateway en Kubernetes — reemplaza nginx + consul-template.
+# Traefik (incluido en k3s) rutea por path a cada Service. El balanceo entre
+# réplicas lo hace el Service (ClusterIP); aquí solo va el ruteo de entrada.
+#
+# Se usa IngressRoute (CRD de Traefik) en vez de Ingress estándar porque permite
+# asociar un middleware (stripPrefix) por-ruta, replicando 1:1 el `rewrite` de
+# nginx del compose:
+#   - receiving/data/analysis/warnings/projects: stripPrefix de /api/v1/<svc>.
+#   - users: SIN strip (la app rutea en /api/v1/users/...).
+# Las Swagger UI usan URL relativa para el spec, así que funcionan con o sin strip.
+
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-receiving
+spec:
+  stripPrefix:
+    prefixes: ["/api/v1/receiving"]
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-data
+spec:
+  stripPrefix:
+    prefixes: ["/api/v1/data"]
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-analysis
+spec:
+  stripPrefix:
+    prefixes: ["/api/v1/analysis"]
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-warnings
+spec:
+  stripPrefix:
+    prefixes: ["/api/v1/warnings"]
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-projects
+spec:
+  stripPrefix:
+    prefixes: ["/api/v1/projects"]
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: landslide-gateway
+spec:
+  entryPoints:
+    - web                    # entrypoint HTTP :80 (default de k3s/Traefik)
+  routes:
+    - match: PathPrefix(`/api/v1/receiving`)
+      kind: Rule
+      middlewares:
+        - name: strip-receiving
+      services:
+        - name: data-receiving
+          port: 8080
+    - match: PathPrefix(`/api/v1/data`)
+      kind: Rule
+      middlewares:
+        - name: strip-data
+      services:
+        - name: data-management
+          port: 8080
+    - match: PathPrefix(`/api/v1/analysis`)
+      kind: Rule
+      middlewares:
+        - name: strip-analysis
+      services:
+        - name: data-analysis
+          port: 8080
+    - match: PathPrefix(`/api/v1/warnings`)
+      kind: Rule
+      middlewares:
+        - name: strip-warnings
+      services:
+        - name: early-warning
+          port: 8080
+    - match: PathPrefix(`/api/v1/users`)
+      kind: Rule
+      # users SIN strip: la app rutea en /api/v1/users/...
+      services:
+        - name: user-management
+          port: 8080
+    - match: PathPrefix(`/api/v1/projects`)
+      kind: Rule
+      middlewares:
+        - name: strip-projects
+      services:
+        - name: project-management
+          port: 8080

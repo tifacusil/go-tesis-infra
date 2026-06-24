@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-early-warning
+  labels:
+    app: mysql-early-warning
+    tier: infra
+spec:
+  # Headless: identidad estable de pod (StatefulSet). DNS: mysql-early-warning.
+  clusterIP: None
+  selector:
+    app: mysql-early-warning
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306

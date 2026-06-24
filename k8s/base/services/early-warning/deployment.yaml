@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: early-warning
+  labels:
+    app: early-warning
+    tier: service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: early-warning
+  template:
+    metadata:
+      labels:
+        app: early-warning
+        tier: service
+    spec:
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: early-warning
+          image: ghcr.io/tifacusil/early-warning:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: early-warning-config
+            - secretRef:
+                name: early-warning
+          env:
+            - name: INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi

@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - statefulset.yaml
+  - service.yaml
+
+# Init SQL reutilizado del compose local (misma fuente, sin duplicar).
+configMapGenerator:
+  - name: mysql-data-management-init
+    files:
+      - initdb/00_schema.sql
+      - initdb/01_tables.sql
+
+generatorOptions:
+  disableNameSuffixHash: true

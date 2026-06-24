@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-analysis
+  labels:
+    app: data-analysis
+    tier: service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: data-analysis
+  template:
+    metadata:
+      labels:
+        app: data-analysis
+        tier: service
+    spec:
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: data-analysis
+          image: ghcr.io/tifacusil/data-analysis:latest
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 50051
+          envFrom:
+            - configMapRef:
+                name: data-analysis-config
+            - secretRef:
+                name: data-analysis
+          env:
+            - name: ANALYSIS__INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-project-management
+  labels:
+    app: mysql-project-management
+    tier: infra
+spec:
+  # Headless: identidad estable de pod (StatefulSet). DNS: mysql-project-management.
+  clusterIP: None
+  selector:
+    app: mysql-project-management
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
