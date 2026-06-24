@@ -8,17 +8,18 @@ name: svc-data-receiving
 # Imagen publicada por el CD del repo go-data-receiving:
 #   ghcr.io/tifacusil/go-data-receiving:latest
 #
-# Config: el binario lee variables RECEIVER__ (ver ../envs/data-receiving.env).
-# Lo compartido va en el env_file; lo que varía por instancia (instance id y el
-# host que Consul usa para el health check) va en `environment`.
+# Config: el binario lee variables de entorno con nombres Go-style (ver
+# ../envs/data-receiving.env), igual que el resto de servicios Go del fleet.
+# Lo compartido va en el env_file; lo que varía por instancia (instance id, host
+# que Consul usa para el health check) va en `environment`.
 #
 # Dependencias externas (deben estar en landslide-net antes de levantar):
 #   - RabbitMQ  → rabbitmq-1:5672
 #   - Redis     → redis:6379
 #   - Consul    → consul-1:8500
 #
-# Nota: la imagen es distroless (sin shell), por eso no se define un healthcheck
-# de Docker con wget; el health real lo hace Consul vía HTTP GET /health/.
+# La imagen es Alpine (trae wget de busybox), por eso se define un healthcheck de
+# Docker; el health real adicional lo hace Consul vía HTTP GET /health.
 #
 # Uso:
 #   docker compose up -d           # levanta las 3 instancias
@@ -36,17 +37,29 @@ services:
     container_name: data-receiving-1
     hostname: data-receiving-1
     restart: unless-stopped
-    networks: [landslide-net]
+    # Alias compartido data-receiving: las 3 instancias resuelven al mismo
+    # nombre DNS de Docker, que devuelve los 3 A-records → nginx hace round-robin
+    # por request sobre el health/metrics (ver nginx.conf, location /api/v1/receiving/).
+    networks:
+      landslide-net:
+        aliases:
+          - data-receiving
     ports:
       - "5000:5000"   # TCP — recepción de frames DTU
       - "8080:8080"   # HTTP — /health y /metrics
     env_file: ../envs/data-receiving.env
     environment:
-      RECEIVER__PORT: "5000"
-      RECEIVER__CONSUL__HEALTHPORT: "8080"
-      RECEIVER__CONSUL__INSTANCEID: data-receiving-01
+      INSTANCE_ID: data-receiving-01
+      TCP_PORT: "5000"
+      HEALTH_PORT: "8080"
       # Consul (en contenedor) alcanza /health por el hostname del servicio, no localhost.
-      RECEIVER__CONSUL__HEALTHCHECKHOST: data-receiving-1
+      ADVERTISE_HOST: data-receiving-1
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 20s
     init: true
 
   data-receiving-2:
@@ -54,16 +67,25 @@ services:
     container_name: data-receiving-2
     hostname: data-receiving-2
     restart: unless-stopped
-    networks: [landslide-net]
+    networks:
+      landslide-net:
+        aliases:
+          - data-receiving
     ports:
       - "5001:5000"
       - "8081:8080"
     env_file: ../envs/data-receiving.env
     environment:
-      RECEIVER__PORT: "5000"
-      RECEIVER__CONSUL__HEALTHPORT: "8080"
-      RECEIVER__CONSUL__INSTANCEID: data-receiving-02
-      RECEIVER__CONSUL__HEALTHCHECKHOST: data-receiving-2
+      INSTANCE_ID: data-receiving-02
+      TCP_PORT: "5000"
+      HEALTH_PORT: "8080"
+      ADVERTISE_HOST: data-receiving-2
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 20s
     init: true
     depends_on: [data-receiving-1]
 
@@ -72,15 +94,24 @@ services:
     container_name: data-receiving-3
     hostname: data-receiving-3
     restart: unless-stopped
-    networks: [landslide-net]
+    networks:
+      landslide-net:
+        aliases:
+          - data-receiving
     ports:
       - "5002:5000"
       - "8082:8080"
     env_file: ../envs/data-receiving.env
     environment:
-      RECEIVER__PORT: "5000"
-      RECEIVER__CONSUL__HEALTHPORT: "8080"
-      RECEIVER__CONSUL__INSTANCEID: data-receiving-03
-      RECEIVER__CONSUL__HEALTHCHECKHOST: data-receiving-3
+      INSTANCE_ID: data-receiving-03
+      TCP_PORT: "5000"
+      HEALTH_PORT: "8080"
+      ADVERTISE_HOST: data-receiving-3
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 20s
     init: true
     depends_on: [data-receiving-1]

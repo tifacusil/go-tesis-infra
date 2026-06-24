@@ -139,6 +139,56 @@ make ping                           # verifica puertos activos
 | user-management     | —          | 8089              |
 | project-management  | —          | 8090              |
 
+## API Gateway y balanceo de carga
+
+El gateway nginx (`infra/nginx/nginx.conf`) enruta por prefijo de ruta a cada
+servicio. Usa `proxy_pass` por **variable** + `resolver 127.0.0.11` (DNS de
+Docker): la resolución es diferida (nginx no crashea si un backend aún no existe)
+y el DNS de Docker hace **round-robin** cuando varias réplicas comparten el mismo
+nombre de red.
+
+### HTTP — balanceado entre las 3 instancias de data-receiving
+
+Las 3 instancias de `data-receiving` comparten el alias de red `data-receiving`,
+de modo que el gateway balancea `/health` y `/metrics` entre ellas sin bloque
+`upstream`:
+
+```yaml
+# services/data-receiving/docker-compose.yml — en cada instancia (-1/-2/-3)
+networks:
+  landslide-net:
+    aliases:
+      - data-receiving
+```
+
+```nginx
+# infra/nginx/nginx.conf — location /api/v1/receiving/
+set $svc http://data-receiving:8080;   # alias compartido, no data-receiving-1
+```
+
+El DNS de Docker devuelve los 3 A-records de `data-receiving` y nginx rota por
+request. Caveats:
+
+- **No es health-aware:** el DNS entrega también la IP de una instancia
+  arriba-pero-no-sana; no hay expulsión automática (eso requeriría un `upstream`
+  con `max_fails`, que en nginx open-source resuelve en startup y deja IPs
+  estáticas, o consul-template).
+- **`/metrics`** conviene scrapearlo por instancia (vía Consul SD), no a través
+  del round-robin, para no mezclar contadores de instancias distintas.
+
+### TCP — sin balanceo de gateway
+
+La ingesta de sensores es **TCP crudo** (frames DTU) en los puertos 5000–5002, que
+el bloque `http{}` de nginx no puede proxyear. Hoy los sensores conectan **directo**
+a cada instancia por su puerto publicado. Opciones L4 si se necesita balanceo
+(no aplicadas): nginx `stream{}` reusando el alias `data-receiving`, HAProxy
+(`mode tcp` + `leastconn` + `tcp-check`, con health checks activos), o —en
+producción— un `Service` de Kubernetes (balanceo L4 nativo, solo a pods *Ready*).
+
+> Para las corridas de benchmark se omite el LB a propósito y se shardea la carga
+> de forma determinista entre las 3 instancias (un generador por puerto), para que
+> el balanceador no contamine las mediciones. Ver el README de `go-data-receiving`.
+
 ## Bases de datos MySQL
 
 Cada microservicio tiene su propio contenedor MySQL (database-per-service):
