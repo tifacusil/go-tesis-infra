@@ -21,6 +21,7 @@ data:
   RECEIVER__CONSUL__HEALTHPORT: "8080"
   RECEIVER__CONSUL__SERVICEVERSION: "1.0.0"
   RECEIVER__CONSUL__ENVIRONMENT: "prod"
-  # Consul deshabilitado: el registro apunta a un host que no resuelve (discovery
-  # vía Service K8s). El health check real lo hace el readinessProbe del pod.
+  # Consul deshabilitado: en K8s el discovery lo da el Service. Sin esto el
+  # registro fallaría al no haber Consul y tumbaría el arranque (errgroup).
+  RECEIVER__CONSUL__ENABLED: "false"
   RECEIVER__CONSUL__ADDRESS: "http://consul-disabled:8500"

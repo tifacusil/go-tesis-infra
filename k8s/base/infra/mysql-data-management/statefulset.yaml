@@ -20,7 +20,6 @@ spec:
       containers:
         - name: mysql
           image: mysql:9.7.0
-          args: ["--default-authentication-plugin=caching_sha2_password"]
           ports:
             - name: mysql
               containerPort: 3306
