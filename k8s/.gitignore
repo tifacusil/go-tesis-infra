@@ -6,10 +6,7 @@ bootstrap/secrets.env
 # Backup de la clave privada del controller sealed-secrets.
 *sealed-secrets-key*.yaml
 
-# SealedSecret generados localmente (cifrados con la clave de OTRO cluster).
-# Cada entorno (VPS) sella los suyos con su propia clave; no se versionan los de prueba.
-overlays/prod/sealed-secrets/*.yaml
-!overlays/prod/sealed-secrets/kustomization.yaml
+# SealedSecret generados desde el VPS, comitear
 
 # Overlay de prueba local (k3d), no para producción.
 overlays/local/

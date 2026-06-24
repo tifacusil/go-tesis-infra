@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: redis
+  namespace: landslide
+spec:
+  encryptedData:
+    REDIS_PASSWORD: AgB5nTXPKqMe3PdXf3xC2dMBmV95tPb93pxNydApaCbNbqNB1AFpm6HtkMNpSe+GKFyE55OEEPYM7xrAme/AkxLK59Z2FbQ7z4gTDarIInCGeiOyaPdOFWISAg0wf0Y6MBjdhA27UI2OYq2fXtP7FKXYN2B40jF5ZbgUXbAIBDY7aPT+KcurXnSo1b0bjV0kQfKDZhKpZa8DKUYNfb3qpqFhy+qMM7ACF5nPXfiqb5+VeWJMqPAFoL0XbLMKwdXH9cj4VqcJP+5jtLgHwdfN4L/16nhKuC3Kn4bpsZzbTSpC9po7PBnrvbahcSl7hcS1tDyxp7v9cC+V/SMbgfyXFgz9wJVRomJwz2VLOMGgisORvZcs4XXMwYdf2cI+4L6JM1Sr6Z7Ze542XvCk/UetPbm2PHlgHhCf5h87FAvN4Fyipsy7pcdKEQmuiMtcMZv0T8VpPPswQwL7fnr0osINQiCmxoRk6ckCCsbMwkXoiL+qE/EM/1z4eBjiEXY1od9d5Ge6KS9D3N+N76Sm9BOQn4p8QMnZiut3KZDttlHLmTlv1q4HPJ28e+h8WPgGprER7BH46mpjJCmQOaBi4435Nt8eKicEv6zKNVUm5vlMuWHtQvoGO11GOs2k0GSXQQv22VpU4LwnWcoBfZaAZn+eBw2tkJTZ2vj9cHQLst5I7FcisrisquQn8daK3LUUpDxLcxE6Nep16OoQi9fewuqgSg==
+  template:
+    metadata:
+      name: redis
+      namespace: landslide

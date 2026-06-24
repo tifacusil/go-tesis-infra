@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: data-analysis
+  namespace: landslide
+spec:
+  encryptedData:
+    MYSQL_PASSWORD: AgACfucyoG4ZwBWPTNyfi31KFgGpVMLMfQMLwfgCghK4pUeXxWlvQsMHjbsSCt0XZ/eD+yGEWdhWpvEnLYFhNZ3SLtd67zpWflkzx/J+e+XFjbch8ba4lGvFLcIz2PTMpPdxPj9p3sRU+i3sNk1mZrgrnYWbR1L2inDS1AjJbO9KJpcCefoodu6iDfyB+XHjfghAgZkIpO/xmq8AIjtcxXFQz2Wi3SYsHaWqZ/Fimx4VFTbKYpsC/u1lCdI0daoJ1OtjLkZ7XZEWcR6FRs7ZBSUcIdzvAewF/QI5wL6i7baGdmBONWiYO9KF9oYHR4zQyCJC0Ud2BJwA34V8RwKRLsh+gwQsw9IV+qyv0wrRZXdMWRXdeavPgXf/Bto3slfnWtti/Tb63IUIOEONkHL/slHvyqScJHGMcn3YSe7wetfvO4yDrhc+Z84Za8Mjt7iCaOJ+zY1cCHiDm8bwarFbsgrTMHUjABnX7Sgd8pNu11lNQX7rxPA+OK67WsUSGgpOEdYnCpiWif3EB78hfLgyxgG7Wo7BpqP/W1XYitEH926fnBhzkEIg8V8y5AoQWsMz99iezNrW0oyY6NS7RRokt/b7icCTZTo4ChJaG2ArEvBU65wu+b/Mxglz2EROC/XfEmPAVCqZXhyzc7t3uZUvmNCH41y1U3Unxz/E5RS7tte1bs2/8z7pRqcn9ixU6l+jvHI/vGUICG3k3z9N+37lgAmTfj+bYJqBE77V
+  template:
+    metadata:
+      name: data-analysis
+      namespace: landslide
