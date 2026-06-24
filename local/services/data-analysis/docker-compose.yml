@@ -35,7 +35,9 @@ services:
     init: true
     healthcheck:
       # imagen Python (uvicorn) — no trae wget/curl. urllib via python.
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health',timeout=2).status==200 else 1)"]
+      # La app bindea al hostname del contenedor (ANALYSIS__HOST), no a localhost,
+      # así que el probe apunta a $HOSTNAME (docker = nombre del contenedor).
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys,os; sys.exit(0 if urllib.request.urlopen('http://'+os.environ['HOSTNAME']+':8080/health',timeout=2).status==200 else 1)\""]
       interval: 10s
       timeout: 2s
       retries: 3
@@ -58,7 +60,7 @@ services:
       data-analysis-1:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health',timeout=2).status==200 else 1)"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys,os; sys.exit(0 if urllib.request.urlopen('http://'+os.environ['HOSTNAME']+':8080/health',timeout=2).status==200 else 1)\""]
       interval: 10s
       timeout: 2s
       retries: 3

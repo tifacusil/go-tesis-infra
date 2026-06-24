@@ -80,7 +80,7 @@ http {
   }
 
   upstream user-management_backend {
-  {{- range service "user-management"}}
+  {{- range service "user-management-service"}}
     server {{.Address}}:{{.Port}} max_fails=3 fail_timeout=10s;
   {{- else}}
     server 127.0.0.1:1;
@@ -88,7 +88,7 @@ http {
   }
 
   upstream project-management_backend {
-  {{- range service "project-management"}}
+  {{- range service "project-management-service"}}
     server {{.Address}}:{{.Port}} max_fails=3 fail_timeout=10s;
   {{- else}}
     server 127.0.0.1:1;
