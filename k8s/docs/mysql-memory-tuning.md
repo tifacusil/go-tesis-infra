@@ -66,11 +66,26 @@ Adicionalmente, el límite de memoria del contenedor se redujo de **512 MiB a
 
 ## 4. Resultado
 
-Tras aplicar la configuración, se libera del orden de **~150–200 MiB por instancia
-MySQL** (principalmente por la reducción del buffer pool y el apagado de
-`performance_schema`), reduciendo la presión de RAM del nodo y restableciendo un
-margen operativo seguro frente al OOM-Killer, **sin alterar la topología de
-réplicas del paper** ni el patrón database-per-service.
+Tras aplicar la configuración y completar el *rolling update* de las cuatro
+instancias MySQL (sin reinicios ni pérdida de datos, los volúmenes persistentes se
+conservan), el uso de RAM del nodo medido con `free -h` pasó de:
+
+| Métrica | Antes (default) | Después (low-mem) |
+|---|---|---|
+| RAM usada | 3.4 GiB (≈92 %) | **2.5 GiB (≈68 %)** |
+| RAM disponible (`available`) | 383 MiB | **1.2 GiB** |
+| RAM libre (`free`) | 183 MiB | 921 MiB |
+| Swap | 0 B | 0 B |
+
+Esto representa **≈900 MiB liberados** (consistente con ~150–200 MiB por instancia
+MySQL, principalmente por la reducción del buffer pool y el apagado de
+`performance_schema`). El nodo pasó de operar al límite (zona de riesgo de
+OOM-Killer, sin swap) a un **margen holgado de 1.2 GiB disponibles**, **sin alterar
+la topología de réplicas del paper** ni el patrón database-per-service.
+
+> Medición tomada en el VPS de despliegue (3.7 GiB de RAM, k3s, nodo único) con la
+> totalidad del sistema en ejecución: 4× MySQL, RabbitMQ, Redis, las réplicas de los
+> 6 microservicios y el plano de control de k3s.
 
 ## 5. Trade-off y reproducibilidad para mediciones
 
