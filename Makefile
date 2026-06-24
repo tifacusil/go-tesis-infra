@@ -1,4 +1,4 @@
-.PHONY: infra-up infra-down infra-reset \
+.PHONY: infra-up infra-down infra-reset infra-rebuild \
         svc-up svc-down svc-logs svc-build \
         all-svc-up all-svc-down \
         all-up all-down \
@@ -37,6 +37,9 @@ infra-down:
 
 infra-reset:
 	$(MAKE) -C $(INFRA_DIR) reset
+
+infra-rebuild:
+	$(MAKE) -C $(INFRA_DIR) rebuild
 
 # ── Un microservicio ──────────────────────────────────────────────────────────
 # Uso: make svc-up SVC=data-receiving
@@ -121,6 +124,7 @@ help:
 	@echo "  make infra-up                     Levanta Consul, RabbitMQ, Redis, MySQL x4, Nginx"
 	@echo "  make infra-down                   Baja la infraestructura"
 	@echo "  make infra-reset                  Reset total (borra volúmenes)"
+	@echo "  make infra-rebuild                Reset + reconstruye imágenes locales (--build)"
 	@echo ""
 	@echo "  make svc-up SVC=<nombre>          Levanta un microservicio"
 	@echo "  make svc-down SVC=<nombre>        Baja un microservicio"

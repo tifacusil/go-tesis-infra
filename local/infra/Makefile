@@ -1,4 +1,4 @@
-.PHONY: up down reset status logs ps wait-healthy
+.PHONY: up down reset rebuild status logs ps wait-healthy
 
 # ─────────────────────────────────────────────────────────────────
 # Makefile — Infraestructura local del sistema de monitoreo
@@ -22,6 +22,17 @@ reset:
 	@read -p "Continuar? [y/N] " confirm && [ "$$confirm" = "y" ]
 	$(COMPOSE) down -v
 	$(MAKE) up
+
+# Rebuild total: baja + borra volúmenes + reconstruye imágenes locales + levanta.
+# Igual que reset pero con --build (reconstruye lo que tiene `build:`, p.ej. el
+# gateway nginx+consul-template). Nota: los datos en bind mounts (mysql-data/)
+# NO los borra `down -v`; bórralos a mano si necesitas un MySQL realmente virgen.
+rebuild:
+	@echo "[!] Esto borrara los volúmenes y reconstruira las imágenes locales."
+	@read -p "Continuar? [y/N] " confirm && [ "$$confirm" = "y" ]
+	$(COMPOSE) down -v
+	$(COMPOSE) up -d --build
+	@$(MAKE) wait-healthy
 
 # Ver estado de todos los contenedores
 status:

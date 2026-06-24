@@ -24,10 +24,12 @@ services:
     networks: [landslide-net]
     ports:
       - "8090:8080"
+      - "9090:9090"   # gRPC — umbrales por proyecto (consumido por early-warning, futuro)
     env_file: ../envs/project-management.env
     environment:
       INSTANCE_ID: project-management-01
       HTTP_PORT: "8080"
+      GRPC_ADDR: ":9090"
     init: true
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
