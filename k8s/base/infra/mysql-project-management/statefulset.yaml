@@ -20,6 +20,13 @@ spec:
       containers:
         - name: mysql
           image: mysql:9.7.0
+          # Bajo consumo de RAM (VPS 3.7Gi): buffer pool reducido y
+          # performance_schema off. Ajustar si se mide rendimiento.
+          args:
+            - "--innodb-buffer-pool-size=64M"
+            - "--innodb-buffer-pool-instances=1"
+            - "--performance-schema=OFF"
+            - "--max-connections=50"
           ports:
             - name: mysql
               containerPort: 3306
@@ -49,7 +56,7 @@ spec:
               cpu: 100m
               memory: 256Mi
             limits:
-              memory: 512Mi
+              memory: 384Mi
       volumes:
         - name: initdb
           configMap:
