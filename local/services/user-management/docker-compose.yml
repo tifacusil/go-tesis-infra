@@ -26,10 +26,6 @@ services:
       - "8089:8080"
       - "9089:9090"   # gRPC — SubscriptionService (consumido por early-warning)
     env_file: ../envs/user-management.env
-    environment:
-      INSTANCE_ID: user-management-01
-      HTTP_PORT: "8080"
-      GRPC_ADDR: ":9090"
     init: true
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]

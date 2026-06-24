@@ -46,10 +46,14 @@ services:
         -config-file=/consul/config/config.json
         -ui
     healthcheck:
-      test: ["CMD", "consul", "members"]
+      # http-addr fuerza IPv4 (127.0.0.1); sin esto el CLI resuelve localhost a
+      # ::1 y falla con "connection refused" durante el arranque (consul escucha
+      # en [::]:8500 pero el race de IPv6 al boot tumba el depends_on de nginx).
+      test: ["CMD", "consul", "members", "-http-addr=http://127.0.0.1:8500"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
 
   # ───────────────────────────────────────────────────────────────────────────
   # RABBITMQ

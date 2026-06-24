@@ -29,14 +29,13 @@ services:
     ports:
       - "8085:8080"   # HTTP — proxied by Nginx
       - "9085:50051"  # gRPC — local debug only; other services use data-analysis-1:50051
-    env_file: ../envs/data-analysis.env
-    environment:
-      ANALYSIS__INSTANCE_ID: data-analysis-01
-      ANALYSIS__HTTP_PORT: "8080"
-      ANALYSIS__GRPC_PORT: "50051"
+    env_file:
+      - ../envs/data-analysis.env
+      - ../envs/data-analysis-1.env
     init: true
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      # imagen Python (uvicorn) — no trae wget/curl. urllib via python.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health',timeout=2).status==200 else 1)"]
       interval: 10s
       timeout: 2s
       retries: 3
@@ -51,17 +50,15 @@ services:
     ports:
       - "8086:8080"   # HTTP — proxied by Nginx
       - "9086:50051"  # gRPC — local debug only; other services use data-analysis-2:50051
-    env_file: ../envs/data-analysis.env
-    environment:
-      ANALYSIS__INSTANCE_ID: data-analysis-02
-      ANALYSIS__HTTP_PORT: "8080"
-      ANALYSIS__GRPC_PORT: "50051"
+    env_file:
+      - ../envs/data-analysis.env
+      - ../envs/data-analysis-2.env
     init: true
     depends_on:
       data-analysis-1:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health',timeout=2).status==200 else 1)"]
       interval: 10s
       timeout: 2s
       retries: 3

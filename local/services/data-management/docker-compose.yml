@@ -25,10 +25,9 @@ services:
     networks: [landslide-net]
     ports:
       - "8083:8080"
-    env_file: ../envs/data-management.env
-    environment:
-      INSTANCE_ID: data-management-01
-      HTTP_PORT: "8080"
+    env_file:
+      - ../envs/data-management.env
+      - ../envs/data-management-1.env
     init: true
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -45,10 +44,9 @@ services:
     networks: [landslide-net]
     ports:
       - "8084:8080"
-    env_file: ../envs/data-management.env
-    environment:
-      INSTANCE_ID: data-management-02
-      HTTP_PORT: "8080"
+    env_file:
+      - ../envs/data-management.env
+      - ../envs/data-management-2.env
     init: true
     depends_on:
       data-management-1:
