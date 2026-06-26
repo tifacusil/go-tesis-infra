@@ -31,11 +31,6 @@ spec:
                 name: data-analysis-config
             - secretRef:
                 name: data-analysis
-          env:
-            - name: ANALYSIS__INSTANCE_ID
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
           livenessProbe:
             httpGet:
               path: /health

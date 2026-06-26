@@ -10,7 +10,6 @@ name: svc-data-analysis
 #
 # Dependencias externas:
 #   - Redis   → redis:6379      (caché de resultados)
-#   - Consul  → consul-1:8500   (service discovery)
 # ─────────────────────────────────────────────────────────────────────────────
 
 networks:
