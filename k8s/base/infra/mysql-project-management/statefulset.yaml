@@ -27,6 +27,8 @@ spec:
             - "--innodb-buffer-pool-instances=1"
             - "--performance-schema=OFF"
             - "--max-connections=50"
+            - "--table-open-cache=64"
+            - "--thread-cache-size=4"
           ports:
             - name: mysql
               containerPort: 3306
