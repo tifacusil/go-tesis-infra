@@ -27,7 +27,7 @@ spec:
               exec redis-server
               --requirepass "$REDIS_PASSWORD"
               --appendonly yes --appendfsync everysec
-              --maxmemory 512mb --maxmemory-policy allkeys-lru
+              --maxmemory 128mb --maxmemory-policy allkeys-lru
               --save 900 1 --save 300 10
           ports:
             - name: redis
@@ -55,7 +55,7 @@ spec:
               cpu: 50m
               memory: 128Mi
             limits:
-              memory: 640Mi
+              memory: 192Mi
   volumeClaimTemplates:
     - metadata:
         name: data
