@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: mysqld-exporter
-          image: prom/mysqld-exporter:v0.17.2
+          image: prom/mysqld-exporter:v0.19.0
           args:
             - '--mysqld.address=mysql-data-management:3306'
             - '--mysqld.username=exporter'
@@ -73,7 +73,7 @@ spec:
     spec:
       containers:
         - name: mysqld-exporter
-          image: prom/mysqld-exporter:v0.17.2
+          image: prom/mysqld-exporter:v0.19.0
           args:
             - '--mysqld.address=mysql-user-management:3306'
             - '--mysqld.username=exporter'
@@ -127,7 +127,7 @@ spec:
     spec:
       containers:
         - name: mysqld-exporter
-          image: prom/mysqld-exporter:v0.17.2
+          image: prom/mysqld-exporter:v0.19.0
           args:
             - '--mysqld.address=mysql-project-management:3306'
             - '--mysqld.username=exporter'
@@ -181,7 +181,7 @@ spec:
     spec:
       containers:
         - name: mysqld-exporter
-          image: prom/mysqld-exporter:v0.17.2
+          image: prom/mysqld-exporter:v0.19.0
           args:
             - '--mysqld.address=mysql-early-warning:3306'
             - '--mysqld.username=exporter'
@@ -236,7 +236,7 @@ spec:
     spec:
       containers:
         - name: rabbitmq-exporter
-          image: kbudde/rabbitmq-exporter:v1.0.0-RC19
+          image: kbudde/rabbitmq-exporter:1.0.0-RC22
           env:
             - name: RABBIT_URL
               value: "http://rabbitmq:15672"
@@ -299,7 +299,7 @@ spec:
     spec:
       containers:
         - name: redis-exporter
-          image: oliver006/redis_exporter:v1.74.0-alpine
+          image: oliver006/redis_exporter:v1.86.0
           env:
             - name: REDIS_ADDR
               value: "redis://redis:6379"
