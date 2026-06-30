@@ -12,6 +12,7 @@ resources:
   - infra/mysql-early-warning
   - infra/redis
   - infra/rabbitmq
+  - infra/observability
   # Microservicios
   - services/data-receiving
   - services/data-management

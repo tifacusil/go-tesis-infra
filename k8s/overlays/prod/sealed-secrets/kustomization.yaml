@@ -22,3 +22,4 @@ resources:
   - early-warning.yaml
   - user-management.yaml
   - project-management.yaml
+  - mysqld-exporter.yaml

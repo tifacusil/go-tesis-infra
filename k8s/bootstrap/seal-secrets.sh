@@ -76,4 +76,7 @@ seal project-management \
   "DB_PASS=$PROJECT_MGMT_DB_PASS" \
   "DB_ROOT_PASS=$PROJECT_MGMT_DB_ROOT_PASS"
 
+# Observabilidad — mysqld-exporter (usuario exporter creado manualmente en cada MySQL)
+seal mysqld-exporter "password=$MYSQLD_EXPORTER_PASSWORD"
+
 echo "[OK] SealedSecret generados. Revisar y commitear $OUT_DIR/*.yaml"

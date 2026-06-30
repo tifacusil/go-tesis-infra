@@ -1,0 +1,333 @@
+# ── mysqld-exporter x4 (uno por BD, database-per-service) ────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysqld-exporter-data-management
+  labels:
+    app: mysqld-exporter-data-management
+    tier: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysqld-exporter-data-management
+  template:
+    metadata:
+      labels:
+        app: mysqld-exporter-data-management
+        tier: observability
+    spec:
+      containers:
+        - name: mysqld-exporter
+          image: prom/mysqld-exporter:v0.17.2
+          args:
+            - '--mysqld.address=mysql-data-management:3306'
+            - '--mysqld.username=exporter'
+          env:
+            - name: MYSQLD_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysqld-exporter
+                  key: password
+          ports:
+            - containerPort: 9104
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysqld-exporter-data-management
+  labels:
+    app: mysqld-exporter-data-management
+    tier: observability
+spec:
+  selector:
+    app: mysqld-exporter-data-management
+  ports:
+    - port: 9104
+      targetPort: 9104
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysqld-exporter-user-management
+  labels:
+    app: mysqld-exporter-user-management
+    tier: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysqld-exporter-user-management
+  template:
+    metadata:
+      labels:
+        app: mysqld-exporter-user-management
+        tier: observability
+    spec:
+      containers:
+        - name: mysqld-exporter
+          image: prom/mysqld-exporter:v0.17.2
+          args:
+            - '--mysqld.address=mysql-user-management:3306'
+            - '--mysqld.username=exporter'
+          env:
+            - name: MYSQLD_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysqld-exporter
+                  key: password
+          ports:
+            - containerPort: 9104
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysqld-exporter-user-management
+  labels:
+    app: mysqld-exporter-user-management
+    tier: observability
+spec:
+  selector:
+    app: mysqld-exporter-user-management
+  ports:
+    - port: 9104
+      targetPort: 9104
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysqld-exporter-project-management
+  labels:
+    app: mysqld-exporter-project-management
+    tier: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysqld-exporter-project-management
+  template:
+    metadata:
+      labels:
+        app: mysqld-exporter-project-management
+        tier: observability
+    spec:
+      containers:
+        - name: mysqld-exporter
+          image: prom/mysqld-exporter:v0.17.2
+          args:
+            - '--mysqld.address=mysql-project-management:3306'
+            - '--mysqld.username=exporter'
+          env:
+            - name: MYSQLD_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysqld-exporter
+                  key: password
+          ports:
+            - containerPort: 9104
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysqld-exporter-project-management
+  labels:
+    app: mysqld-exporter-project-management
+    tier: observability
+spec:
+  selector:
+    app: mysqld-exporter-project-management
+  ports:
+    - port: 9104
+      targetPort: 9104
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysqld-exporter-early-warning
+  labels:
+    app: mysqld-exporter-early-warning
+    tier: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysqld-exporter-early-warning
+  template:
+    metadata:
+      labels:
+        app: mysqld-exporter-early-warning
+        tier: observability
+    spec:
+      containers:
+        - name: mysqld-exporter
+          image: prom/mysqld-exporter:v0.17.2
+          args:
+            - '--mysqld.address=mysql-early-warning:3306'
+            - '--mysqld.username=exporter'
+          env:
+            - name: MYSQLD_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysqld-exporter
+                  key: password
+          ports:
+            - containerPort: 9104
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysqld-exporter-early-warning
+  labels:
+    app: mysqld-exporter-early-warning
+    tier: observability
+spec:
+  selector:
+    app: mysqld-exporter-early-warning
+  ports:
+    - port: 9104
+      targetPort: 9104
+---
+# ── rabbitmq-exporter ─────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq-exporter
+  labels:
+    app: rabbitmq-exporter
+    tier: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq-exporter
+  template:
+    metadata:
+      labels:
+        app: rabbitmq-exporter
+        tier: observability
+    spec:
+      containers:
+        - name: rabbitmq-exporter
+          image: kbudde/rabbitmq-exporter:v1.0.0-RC19
+          env:
+            - name: RABBIT_URL
+              value: "http://rabbitmq:15672"
+            - name: RABBIT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq
+                  key: RABBITMQ_DEFAULT_PASS
+            - name: PUBLISH_PORT
+              value: "9419"
+            - name: LOG_LEVEL
+              value: "warning"
+          ports:
+            - containerPort: 9419
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-exporter
+  labels:
+    app: rabbitmq-exporter
+    tier: observability
+spec:
+  selector:
+    app: rabbitmq-exporter
+  ports:
+    - port: 9419
+      targetPort: 9419
+---
+# ── redis-exporter ────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-exporter
+  labels:
+    app: redis-exporter
+    tier: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-exporter
+  template:
+    metadata:
+      labels:
+        app: redis-exporter
+        tier: observability
+    spec:
+      containers:
+        - name: redis-exporter
+          image: oliver006/redis_exporter:v1.74.0-alpine
+          env:
+            - name: REDIS_ADDR
+              value: "redis://redis:6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis
+                  key: REDIS_PASSWORD
+          ports:
+            - containerPort: 9121
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-exporter
+  labels:
+    app: redis-exporter
+    tier: observability
+spec:
+  selector:
+    app: redis-exporter
+  ports:
+    - port: 9121
+      targetPort: 9121
