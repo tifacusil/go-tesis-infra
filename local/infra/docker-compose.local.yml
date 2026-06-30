@@ -1,0 +1,41 @@
+name: landslide-local
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stack local — corre en la LAPTOP del experimentador.
+# Levanta: Grafana (se conecta a Prometheus del servidor vía SSH tunnel).
+#
+# Prereq: túnel SSH activo antes de levantar:
+#   ssh -L 9090:localhost:9090 usuario@servidor
+#
+# Uso:
+#   docker compose -f docker-compose.local.yml --env-file envs/observability.env up -d
+#   make local-up
+# ─────────────────────────────────────────────────────────────────────────────
+
+volumes:
+  grafana-data: {}
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # GRAFANA — visualización
+  # UI en http://localhost:3000
+  # Datasource Prometheus apunta a http://host.docker.internal:9090
+  # (resuelve al túnel SSH activo en la laptop)
+  # ─────────────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:12.0.2
+    container_name: grafana
+    hostname: grafana
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASS:-admin}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro

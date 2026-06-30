@@ -4,6 +4,10 @@
 # Excepto .env.example
 !**/envs/**/*.env.example
 
+# Resultados de Artillery (JSONs y HTMLs generados — no van al repo)
+load-tests/results/*/
+!load-tests/results/.gitkeep
+
 # Datos de volúmenes (bind mounts) — generados al levantar docker compose
 **/consul-data-1/
 **/rabbitmq-data-1/

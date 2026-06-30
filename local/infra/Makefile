@@ -1,10 +1,12 @@
-.PHONY: up down reset rebuild status logs ps wait-healthy
+.PHONY: up down reset rebuild status logs ps wait-healthy obs-up obs-down local-up local-down
 
 # ─────────────────────────────────────────────────────────────────
 # Makefile — Infraestructura local del sistema de monitoreo
 # ─────────────────────────────────────────────────────────────────
 
-COMPOSE = docker compose -f docker-compose.yml
+COMPOSE       = docker compose -f docker-compose.yml
+COMPOSE_OBS   = docker compose -f docker-compose.observability.yml --env-file envs/observability.env
+COMPOSE_LOCAL = docker compose -f docker-compose.local.yml --env-file envs/observability.env
 
 # Levantar toda la infraestructura en background
 up:
@@ -67,6 +69,32 @@ wait-healthy:
 	@echo "   MySQL:          localhost:3306-3309"
 	@echo "   Redis:          localhost:6379"
 	@echo "   Nginx (gateway):http://localhost:80"
+
+# Levantar stack de observabilidad (Prometheus + exporters + Grafana)
+# Requiere: infra base ya corriendo (make up) + envs/observability.env creado
+obs-up:
+	@echo "-> Levantando observabilidad..."
+	$(COMPOSE_OBS) up -d
+	@echo ""
+	@echo "[OK] Observabilidad lista."
+	@echo "   Prometheus: http://localhost:9090"
+	@echo "   Grafana:    http://localhost:3000"
+
+# Bajar stack de observabilidad sin borrar datos de Grafana/Prometheus
+obs-down:
+	$(COMPOSE_OBS) down
+
+# Levantar Grafana en laptop (requiere túnel SSH activo: ssh -L 9090:localhost:9090 usuario@servidor)
+local-up:
+	@echo "-> Levantando Grafana local..."
+	$(COMPOSE_LOCAL) up -d
+	@echo ""
+	@echo "[OK] Grafana lista."
+	@echo "   Grafana: http://localhost:3000"
+	@echo "   (Asegúrate de tener el túnel SSH activo)"
+
+local-down:
+	$(COMPOSE_LOCAL) down
 
 # Verificar conectividad rápida sin Docker
 ping:

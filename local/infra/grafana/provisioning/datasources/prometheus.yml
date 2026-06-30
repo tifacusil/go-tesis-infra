@@ -1,0 +1,11 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # host.docker.internal resuelve al túnel SSH activo en la laptop:
+    #   ssh -L 9090:localhost:9090 usuario@servidor
+    url: http://host.docker.internal:9090
+    isDefault: true
+    editable: false

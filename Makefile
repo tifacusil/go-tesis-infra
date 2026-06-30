@@ -2,6 +2,8 @@
         svc-up svc-down svc-logs svc-build \
         all-svc-up all-svc-down \
         all-up all-down \
+        obs-up obs-down local-up local-down \
+        load-test \
         status ping help
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -97,6 +99,30 @@ all-up: infra-up all-svc-up
 all-down: all-svc-down infra-down
 	@echo "[OK] Sistema completo bajado."
 
+# ── Observabilidad ───────────────────────────────────────────────────────────
+# obs-up/obs-down: Prometheus + exporters en el SERVIDOR
+# local-up/local-down: Grafana en la LAPTOP
+
+obs-up:
+	$(MAKE) -C $(INFRA_DIR) obs-up
+
+obs-down:
+	$(MAKE) -C $(INFRA_DIR) obs-down
+
+local-up:
+	$(MAKE) -C $(INFRA_DIR) local-up
+
+local-down:
+	$(MAKE) -C $(INFRA_DIR) local-down
+
+# ── Load tests ────────────────────────────────────────────────────────────────
+# Uso: make load-test TARGET_HOST=http://IP_SERVIDOR SYSTEM=A
+# Requiere Artillery instalado: npm install -g artillery
+
+load-test:
+	@test -n "$(TARGET_HOST)" || (echo "Falta TARGET_HOST. Ej: make load-test TARGET_HOST=http://IP SYSTEM=A" && exit 1)
+	TARGET_HOST=$(TARGET_HOST) SYSTEM=$(SYSTEM) bash load-tests/run-all.sh
+
 # ── Utilidades ────────────────────────────────────────────────────────────────
 
 status:
@@ -139,5 +165,13 @@ help:
 	@echo ""
 	@echo "  make status                       Estado de todos los contenedores"
 	@echo "  make ping                         Verifica conectividad de puertos"
+	@echo ""
+	@echo "  make obs-up                       Levanta Prometheus + exporters (SERVIDOR)"
+	@echo "  make obs-down                     Baja Prometheus + exporters"
+	@echo "  make local-up                     Levanta Grafana (LAPTOP, requiere túnel SSH)"
+	@echo "  make local-down                   Baja Grafana local"
+	@echo ""
+	@echo "  make load-test TARGET_HOST=http://IP SYSTEM=A"
+	@echo "                                    Corre las 5 corridas de Artillery"
 	@echo ""
 	@echo "Servicios disponibles: $(SERVICES)"

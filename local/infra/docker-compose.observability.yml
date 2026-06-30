@@ -1,0 +1,155 @@
+name: landslide-observability
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stack de observabilidad — corre en el SERVIDOR junto a la infra base.
+# Levanta: Prometheus + exporters (node, mysql x4, rabbitmq, redis).
+#
+# Uso en el servidor:
+#   docker compose -f docker-compose.observability.yml --env-file envs/observability.env up -d
+#   make obs-up
+#
+# Requiere: docker-compose.yml ya levantado (red landslide-net debe existir).
+# Requiere: envs/observability.env (copiar de observability.env.example).
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  landslide-net:
+    external: true
+
+volumes:
+  prometheus-data: {}
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # NODE EXPORTER — CPU% y memoria MB del host del servidor
+  # Métricas clave: node_cpu_seconds_total, node_memory_MemAvailable_bytes
+  # ─────────────────────────────────────────────────────────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: node-exporter
+    hostname: node-exporter
+    restart: unless-stopped
+    networks: [landslide-net]
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    expose:
+      - "9100"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # MYSQLD EXPORTER — uno por cada contenedor MySQL (database-per-service)
+  # ─────────────────────────────────────────────────────────────────────────
+  mysqld-exporter-data-management:
+    image: prom/mysqld-exporter:v0.17.2
+    container_name: mysqld-exporter-data-management
+    hostname: mysqld-exporter-data-management
+    restart: unless-stopped
+    networks: [landslide-net]
+    environment:
+      DATA_SOURCE_NAME: "${MYSQL_DATA_MANAGEMENT_DSN}"
+    expose:
+      - "9104"
+
+  mysqld-exporter-user-management:
+    image: prom/mysqld-exporter:v0.17.2
+    container_name: mysqld-exporter-user-management
+    hostname: mysqld-exporter-user-management
+    restart: unless-stopped
+    networks: [landslide-net]
+    environment:
+      DATA_SOURCE_NAME: "${MYSQL_USER_MANAGEMENT_DSN}"
+    expose:
+      - "9104"
+
+  mysqld-exporter-project-management:
+    image: prom/mysqld-exporter:v0.17.2
+    container_name: mysqld-exporter-project-management
+    hostname: mysqld-exporter-project-management
+    restart: unless-stopped
+    networks: [landslide-net]
+    environment:
+      DATA_SOURCE_NAME: "${MYSQL_PROJECT_MANAGEMENT_DSN}"
+    expose:
+      - "9104"
+
+  mysqld-exporter-early-warning:
+    image: prom/mysqld-exporter:v0.17.2
+    container_name: mysqld-exporter-early-warning
+    hostname: mysqld-exporter-early-warning
+    restart: unless-stopped
+    networks: [landslide-net]
+    environment:
+      DATA_SOURCE_NAME: "${MYSQL_EARLY_WARNING_DSN}"
+    expose:
+      - "9104"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # RABBITMQ EXPORTER — métricas de colas y throughput del broker
+  # ─────────────────────────────────────────────────────────────────────────
+  rabbitmq-exporter:
+    image: kbudde/rabbitmq-exporter:v1.0.0-RC19
+    container_name: rabbitmq-exporter
+    hostname: rabbitmq-exporter
+    restart: unless-stopped
+    networks: [landslide-net]
+    environment:
+      RABBIT_URL: "http://rabbitmq-1:15672"
+      RABBIT_USER: "${RABBITMQ_ADMIN_USER}"
+      RABBIT_PASSWORD: "${RABBITMQ_ADMIN_PASS}"
+      PUBLISH_PORT: "9419"
+      LOG_LEVEL: "warning"
+    expose:
+      - "9419"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # REDIS EXPORTER — memoria y hit rate del buffer de deduplicación
+  # ─────────────────────────────────────────────────────────────────────────
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.74.0-alpine
+    container_name: redis-exporter
+    hostname: redis-exporter
+    restart: unless-stopped
+    networks: [landslide-net]
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+    expose:
+      - "9121"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PROMETHEUS — scraper central, retención 30 días
+  # Puerto 9090 expuesto para SSH tunnel desde laptop:
+  #   ssh -L 9090:localhost:9090 usuario@servidor
+  # ─────────────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    container_name: prometheus
+    hostname: prometheus
+    restart: unless-stopped
+    networks: [landslide-net]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - node-exporter
+      - rabbitmq-exporter
+      - redis-exporter
+      - mysqld-exporter-data-management
+      - mysqld-exporter-user-management
+      - mysqld-exporter-project-management
+      - mysqld-exporter-early-warning

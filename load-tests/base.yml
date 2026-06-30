@@ -1,0 +1,28 @@
+config:
+  # Apunta al Nginx del servidor (ajustar IP/hostname del servidor)
+  target: "http://{{ $processEnvironment.TARGET_HOST }}"
+  http:
+    timeout: 30
+  # Artillery reporta p50/p95/p99 por defecto
+  plugins:
+    metrics-by-endpoint: {}
+
+scenarios:
+  - name: "Ingest sensor frame"
+    flow:
+      - post:
+          url: "/api/v1/data"
+          headers:
+            Content-Type: "application/json"
+          json:
+            sensor_id: "GNSS-{{ $randomInt(1, 20) }}"
+            timestamp: "{{ $isoTimestamp }}"
+            latitude: -12.046374
+            longitude: -77.042793
+            altitude: 154.3
+            displacement_x: "{{ $randomNumber(-5.0, 5.0) }}"
+            displacement_y: "{{ $randomNumber(-5.0, 5.0) }}"
+            displacement_z: "{{ $randomNumber(-2.0, 2.0) }}"
+          capture:
+            - json: "$.message_id"
+              as: "message_id"
