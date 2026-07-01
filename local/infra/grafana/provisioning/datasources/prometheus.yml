@@ -1,11 +1,20 @@
 apiVersion: 1
 
 datasources:
-  - name: Prometheus
+  - name: Prometheus-SistemaA
     type: prometheus
     access: proxy
-    # Apunta directo al servidor. Cambiar IP si cambia el host.
-    # Alternativa con túnel SSH: http://host.docker.internal:9090
     url: http://204.168.203.32:9090
     isDefault: true
     editable: false
+    jsonData:
+      httpMethod: GET
+
+  - name: Prometheus-SistemaB
+    type: prometheus
+    access: proxy
+    url: http://178.105.104.95:31083
+    isDefault: false
+    editable: false
+    jsonData:
+      httpMethod: GET
