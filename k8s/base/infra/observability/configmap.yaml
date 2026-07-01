@@ -52,6 +52,7 @@ data:
           - targets: ['redis-exporter:9121']
 
       # ── Microservicios Go (/metrics) ──────────────────────────────────────
+      # Solo puerto 8080 — descarta gRPC (50051, 9090) y TCP raw (5000).
       - job_name: microservices
         metrics_path: /metrics
         kubernetes_sd_configs:
@@ -62,8 +63,11 @@ data:
           - source_labels: [__meta_kubernetes_pod_label_tier]
             action: keep
             regex: service
-          - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_container_port_number]
-            separator: ':'
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: "8080"
+          - source_labels: [__meta_kubernetes_pod_ip]
             target_label: __address__
+            replacement: $1:8080
           - source_labels: [__meta_kubernetes_pod_label_app]
             target_label: app
