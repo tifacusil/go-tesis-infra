@@ -15,11 +15,8 @@ data:
   MYSQL_PORT: "3306"
   MYSQL_DATABASE: "data_management"
   MYSQL_USER: "svc_data_mgmt"
-  # Consul deshabilitado: en K8s el discovery lo da el Service. El registro
-  # queda inerte (apunta a un host inexistente; el código es best-effort).
-  CONSUL_ENABLED: "false"
-  CONSUL_HOST: "consul-disabled"
-  CONSUL_PORT: "8500"
+  # Discovery lo da el Service K8s; no hay Consul en el sistema.
   HTTP_PORT: "8080"
+  GRPC_PORT: "9090"
   ENV: "prod"
   LOG_LEVEL: "info"

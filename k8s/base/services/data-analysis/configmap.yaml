@@ -9,7 +9,12 @@ data:
   ANALYSIS__HOST: "0.0.0.0"
   ANALYSIS__HTTP_PORT: "8080"
   ANALYSIS__GRPC_PORT: "50051"
-  # MySQL — réplica de lectura de data-management (usuario read-only).
+  # ReadingService gRPC de data-management (reemplaza el acceso directo a su
+  # MySQL, database-per-service). Resuelto por DNS del Service K8s.
+  DATA_MANAGEMENT_GRPC_ADDR: "data-management:9090"
+  # DEPRECADO: acceso directo a la BD de data-management (viola
+  # database-per-service). Se elimina cuando analyze_servicer.py migre a
+  # GetReadingSeries vía DATA_MANAGEMENT_GRPC_ADDR.
   MYSQL_HOST: "mysql-data-management"
   MYSQL_PORT: "3306"
   MYSQL_DATABASE: "data_management"
