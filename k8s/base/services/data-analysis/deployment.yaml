@@ -29,8 +29,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: data-analysis-config
-            - secretRef:
-                name: data-analysis
           livenessProbe:
             httpGet:
               path: /health

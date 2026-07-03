@@ -15,13 +15,9 @@ GRANT SELECT, INSERT, UPDATE
   ON data_management.*
   TO 'svc_data_mgmt'@'%';
 
--- Réplica de lectura para data-analysis (acceso solo lectura)
--- data-analysis no tiene BD propia; lee de aquí vía usuario restringido.
-CREATE USER IF NOT EXISTS 'svc_data_analysis_ro'@'%'
-  IDENTIFIED BY 'changeme_data_analysis_ro';
-
-GRANT SELECT
-  ON data_management.*
-  TO 'svc_data_analysis_ro'@'%';
+-- data-analysis ya NO accede a esta BD: lee las series vía gRPC
+-- (data-management.ReadingService), respetando database-per-service. El usuario
+-- svc_data_analysis_ro fue eliminado. En un cluster ya inicializado, dropearlo
+-- a mano: DROP USER IF EXISTS 'svc_data_analysis_ro'@'%';
 
 FLUSH PRIVILEGES;

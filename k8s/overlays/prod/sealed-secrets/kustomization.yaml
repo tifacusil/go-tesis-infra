@@ -18,7 +18,6 @@ resources:
   - rabbitmq.yaml
   - data-receiving.yaml
   - data-management.yaml
-  - data-analysis.yaml
   - early-warning.yaml
   - user-management.yaml
   - project-management.yaml
