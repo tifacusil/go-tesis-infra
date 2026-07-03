@@ -28,5 +28,25 @@ scrape_configs:
   # RabbitMQ: sin management plugin — no hay exporter disponible.
   # Consumo de proceso cubierto por node_exporter vía process_* metrics.
 
-  # Microservicios Sistema A: no exponen /metrics.
-  # Throughput y latencia se obtienen de los reportes de Artillery.
+  # ── Microservicios Sistema A (/metrics propio) ─────────────────────────────
+  # Ahora exponen /metrics en su mismo puerto HTTP. Prometheus corre en el
+  # host junto a los servicios, por eso targets = localhost:<puerto app>.
+  # Métricas por servicio:
+  #   process_cpu_seconds_total, process_resident_memory_bytes  (CPU / RAM)
+  #   <prefijo>_messages_processed_total | pm_requests_total     (throughput)
+  #   <prefijo>_persist_latency_seconds_bucket                   (latencia p50..p99)
+  - job_name: microservices
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['localhost:8082', 'localhost:8086']
+        labels:
+          service: data-management
+          component: microservice
+      - targets: ['localhost:8083']
+        labels:
+          service: early-warning
+          component: microservice
+      - targets: ['localhost:8084']
+        labels:
+          service: project-management
+          component: microservice
