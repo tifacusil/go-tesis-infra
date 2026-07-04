@@ -42,11 +42,11 @@ scrape_configs:
         labels:
           service: data-management
           component: microservice
-      - targets: ['localhost:8083']
+      - targets: ['localhost:8088', 'localhost:8092']
         labels:
           service: early-warning
           component: microservice
-      - targets: ['localhost:8088', 'localhost:8092']
+      - targets: ['localhost:8084']
         labels:
           service: project-management
           component: microservice
