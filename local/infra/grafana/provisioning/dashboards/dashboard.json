@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 4,
   "links": [],
   "panels": [
     {
@@ -622,6 +622,7 @@
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
+      "description": "Latencia end-to-end de las peticiones HTTP, medida automáticamente por el framework (Spring Boot Actuator / Flask) en cada endpoint. Los tiempos se agrupan en cubetas (histogram) y Prometheus calcula los percentiles vía histogram_quantile. Cobertura completa: todo el tráfico HTTP del servicio queda instrumentado sin intervención manual del desarrollador.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -675,7 +676,32 @@
           },
           "unit": "s"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "p50"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -755,6 +781,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
+      "description": "Latencia de requests HTTP agregada de los 4 servicios REST del sistema (data-management, project-management, user-management, early-warning), vía middleware genérico que envuelve cada router completo — cobertura garantizada, no instrumentación manual por ruta. Todos comparten el mismo nombre de métrica (http_request_duration_seconds) para poder agregarse en un solo cálculo de percentiles vía histogram_quantile. Excluye la duración de sesión TCP de data-receiving (panel separado: \"data-receiving: duración sesión TCP\"), porque mide algo distinto — una sesión completa, no una operación puntual — y mezclarlo distorsionaría el percentil.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -808,7 +835,32 @@
           },
           "unit": "s"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "p50"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -888,7 +940,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Cobertura de transporte para data-receiving (TCP, no HTTP): conexiones activas y tasa de aceptacion. Equivalente al throughput/carga que el resto de servicios expresa via http_requests_total.",
+      "description": "El transporte de data-receiving es TCP (frames de sensores), no HTTP: no aplica el middleware genérico de arriba. Este panel es su equivalente de throughput/carga — conexiones activas concurrentes y tasa de aceptación (accepts/s) — instrumentado directamente en el accept-loop (ConnOpened/ConnClosed), garantizado por diseño, no opcional.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1013,7 +1065,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Duracion de sesion TCP (accept -> close) en data-receiving. Es su equivalente de 'latencia de request', excluido del panel de latencia HTTP agregada porque mide algo distinto (sesion completa, no una operacion puntual).",
+      "description": "Cuánto vive una conexión TCP entre accept y close. Es el \"tiempo de respuesta\" de este servicio, pero a nivel de sesión completa (puede incluir varios frames), no de request individual — por eso vive en panel propio y no se mezcla con la latencia HTTP agregada de arriba.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1151,12 +1203,12 @@
     "list": []
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Rewrite metrics dashboard",
-  "uid": "2001e974-52db-4898-8cb5-458909a709c6",
-  "version": 9
+  "title": "Sistem Metrics Dashboard",
+  "uid": "2001e974-52db-4898-8cb5-458909a709c9",
+  "version": 6
 }
