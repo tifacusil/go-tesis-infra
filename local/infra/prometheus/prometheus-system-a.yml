@@ -50,3 +50,7 @@ scrape_configs:
         labels:
           service: project-management
           component: microservice
+      - targets: ['localhost:5000']
+        labels:
+          service: data-analysis
+          component: microservice

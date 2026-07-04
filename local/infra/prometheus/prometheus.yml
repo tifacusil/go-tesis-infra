@@ -39,12 +39,15 @@ scrape_configs:
   - job_name: microservices
     metrics_path: /metrics
     static_configs:
-      - targets:
-          - 'data-receiving-1:8080'
-          - 'data-management-1:8081'
-          - 'data-analysis-1:8082'
-          - 'early-warning-1:8083'
-          - 'user-management-1:8084'
-          - 'project-management-1:8085'
-        labels:
-          component: microservice
+      - targets: ['data-receiving-1:8080']
+        labels: {service: data-receiving, component: microservice}
+      - targets: ['data-management-1:8081']
+        labels: {service: data-management, component: microservice}
+      - targets: ['data-analysis-1:8082']
+        labels: {service: data-analysis, component: microservice}
+      - targets: ['early-warning-1:8083']
+        labels: {service: early-warning, component: microservice}
+      - targets: ['user-management-1:8084']
+        labels: {service: user-management, component: microservice}
+      - targets: ['project-management-1:8085']
+        labels: {service: project-management, component: microservice}
