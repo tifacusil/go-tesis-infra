@@ -841,7 +841,7 @@
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate({__name__=~\".*_seconds_bucket\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate({__name__=~\".*_seconds_bucket\", __name__!~\".*tcp_connection_duration_seconds_bucket\"}[5m])) by (le))",
           "legendFormat": "p50",
           "range": true,
           "refId": "A"
@@ -852,7 +852,7 @@
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.90, sum(rate({__name__=~\".*_seconds_bucket\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.90, sum(rate({__name__=~\".*_seconds_bucket\", __name__!~\".*tcp_connection_duration_seconds_bucket\"}[5m])) by (le))",
           "legendFormat": "p90",
           "range": true,
           "refId": "B"
@@ -863,7 +863,7 @@
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate({__name__=~\".*_seconds_bucket\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate({__name__=~\".*_seconds_bucket\", __name__!~\".*tcp_connection_duration_seconds_bucket\"}[5m])) by (le))",
           "legendFormat": "p95",
           "range": true,
           "refId": "C"
@@ -874,13 +874,272 @@
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate({__name__=~\".*_seconds_bucket\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate({__name__=~\".*_seconds_bucket\", __name__!~\".*tcp_connection_duration_seconds_bucket\"}[5m])) by (le))",
           "legendFormat": "p99",
           "range": true,
           "refId": "D"
         }
       ],
       "title": "Sist B - Latencia p50/p90/p95/p99 (s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "description": "Cobertura de transporte para data-receiving (TCP, no HTTP): conexiones activas y tasa de aceptacion. Equivalente al throughput/carga que el resto de servicios expresa via http_requests_total.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "accepts/s"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "reqps"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "timezone": [
+          "America/Lima"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(data_receiving_tcp_connections_active)",
+          "legendFormat": "conexiones activas",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(data_receiving_tcp_connections_opened_total[1m]))",
+          "legendFormat": "accepts/s",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Sist B - data-receiving: conexiones TCP",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "description": "Duracion de sesion TCP (accept -> close) en data-receiving. Es su equivalente de 'latencia de request', excluido del panel de latencia HTTP agregada porque mide algo distinto (sesion completa, no una operacion puntual).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "timezone": [
+          "America/Lima"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum(rate(data_receiving_tcp_connection_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.90, sum(rate(data_receiving_tcp_connection_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p90",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(data_receiving_tcp_connection_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(data_receiving_tcp_connection_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Sist B - data-receiving: duracion sesion TCP p50-p99 (s)",
       "type": "timeseries"
     }
   ],
