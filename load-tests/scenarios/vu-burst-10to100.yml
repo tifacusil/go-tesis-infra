@@ -1,0 +1,39 @@
+config:
+  target: "http://{{ $processEnvironment.TARGET_HOST }}"
+  phases:
+    - name: "steady-baseline-10vu"
+      duration: 120
+      arrivalRate: 10
+    - name: "spike-to-100vu"
+      duration: 15
+      arrivalRate: 10
+      rampTo: 100
+    - name: "spike-hold-100vu"
+      duration: 30
+      arrivalRate: 100
+    - name: "recovery-to-10vu"
+      duration: 15
+      arrivalRate: 100
+      rampTo: 10
+    - name: "steady-recovery-10vu"
+      duration: 120
+      arrivalRate: 10
+  http:
+    timeout: 30
+
+scenarios:
+  - name: "Ingest sensor frame"
+    flow:
+      - post:
+          url: "/api/v1/data"
+          headers:
+            Content-Type: "application/json"
+          json:
+            sensor_id: "GNSS-{{ $randomInt(1, 20) }}"
+            timestamp: "{{ $isoTimestamp }}"
+            latitude: -12.046374
+            longitude: -77.042793
+            altitude: 154.3
+            displacement_x: "{{ $randomNumber(-5.0, 5.0) }}"
+            displacement_y: "{{ $randomNumber(-5.0, 5.0) }}"
+            displacement_z: "{{ $randomNumber(-2.0, 2.0) }}"

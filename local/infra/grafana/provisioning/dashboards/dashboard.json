@@ -1439,6 +1439,219 @@
       ],
       "title": "Sist B - gRPC: latencia p50/p90/p95/p99 (s)",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "description": "Solo Sistema B. Backpressure de ingesta: entradas en sensor_buffer:* (Redis) pendientes de publisher confirm de RabbitMQ. Un crecimiento sostenido (no drena entre pasadas del RetryWorker) indica que la tasa de llegada supera lo que el broker/consumidores pueden absorber.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "timezone": [
+          "America/Lima"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(data_receiving_redis_buffer_pending)",
+          "legendFormat": "buffer pendiente",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Sist B - data-receiving: backlog Redis (sensor_buffer pendiente)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "description": "Solo Sistema B. Profundidad de la cola sensors.raw en RabbitMQ (mensajes listos para consumir, via rabbitmq-exporter). Un crecimiento sostenido indica que los consumidores (data-management/early-warning) no drenan al ritmo de publicacion — el cuello de botella real de la ingesta.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "timezone": [
+          "America/Lima"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(rabbitmq_queue_messages_ready{queue=\"sensors.raw\"})",
+          "legendFormat": "ready (sensors.raw)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(rabbitmq_channel_messages_unacked)",
+          "legendFormat": "unacked (todos los canales)",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Sist B - RabbitMQ: profundidad de cola / mensajes sin ack",
+      "type": "timeseries"
     }
   ],
   "preload": false,
@@ -1455,6 +1668,6 @@
   "timepicker": {},
   "timezone": "browser",
   "title": "Sistem Metrics Dashboard",
-  "uid": "2001e974-52db-4898-8cb5-458909a709c9",
-  "version": 6
+  "uid": "2001e974-52db-4898-8cb5-458909a709c2",
+  "version": 7
 }
