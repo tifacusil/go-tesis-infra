@@ -91,7 +91,6 @@ local-up:
 	@echo ""
 	@echo "[OK] Grafana lista."
 	@echo "   Grafana: http://localhost:3000"
-	@echo "   (Asegúrate de tener el túnel SSH activo)"
 
 local-down:
 	$(COMPOSE_LOCAL) down
