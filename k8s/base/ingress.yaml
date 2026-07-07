@@ -4,7 +4,21 @@
 #
 # Se usa IngressRoute (CRD de Traefik) en vez de Ingress estándar porque permite
 # asociar un middleware (stripPrefix) por-ruta, replicando 1:1 el `rewrite` de
-# nginx del compose:
+# nginx del compose. strategy: p2c en cada services[] reemplaza el default wrr.
+#
+# DESVIACIÓN CONOCIDA vs. baseline (Sistema A, nginx least_conn):
+#   - Sistema A: least_conn determinista — evalúa TODAS las réplicas activas del
+#     upstream y rutea siempre a la de menor conteo de conexiones.
+#   - Sistema B (este): Traefik no implementa least_conn; p2c (power of two
+#     choices) es probabilístico — muestrea 2 réplicas al azar y rutea a la de
+#     menor conexiones activas entre esas 2, no contra el total.
+#   - Con pocos backends (2-3 réplicas, caso típico aquí) el comportamiento
+#     converge al de least_conn (con 2 réplicas son estadísticamente idénticos).
+#   - Con más réplicas, p2c introduce varianza leve respecto al óptimo global de
+#     least_conn. No aplica en este proyecto (réplicas bajas por servicio), pero
+#     debe quedar documentado para no comparar resultados de benchmark como si
+#     fueran el mismo algoritmo.
+#
 #   - receiving/data/analysis/warnings/projects: stripPrefix de /api/v1/<svc>.
 #   - users: SIN strip (la app rutea en /api/v1/users/...).
 # Las Swagger UI usan URL relativa para el spec, así que funcionan con o sin strip.
@@ -64,6 +78,7 @@ spec:
       services:
         - name: data-receiving
           port: 8080
+          strategy: p2c
     - match: PathPrefix(`/api/v1/data`)
       kind: Rule
       middlewares:
@@ -71,6 +86,7 @@ spec:
       services:
         - name: data-management
           port: 8080
+          strategy: p2c
     - match: PathPrefix(`/api/v1/analysis`)
       kind: Rule
       middlewares:
@@ -78,6 +94,7 @@ spec:
       services:
         - name: data-analysis
           port: 8080
+          strategy: p2c
     - match: PathPrefix(`/api/v1/warnings`)
       kind: Rule
       middlewares:
@@ -85,12 +102,14 @@ spec:
       services:
         - name: early-warning
           port: 8080
+          strategy: p2c
     - match: PathPrefix(`/api/v1/users`)
       kind: Rule
       # users SIN strip: la app rutea en /api/v1/users/...
       services:
         - name: user-management
           port: 8080
+          strategy: p2c
     - match: PathPrefix(`/api/v1/projects`)
       kind: Rule
       middlewares:
@@ -98,3 +117,4 @@ spec:
       services:
         - name: project-management
           port: 8080
+          strategy: p2c
