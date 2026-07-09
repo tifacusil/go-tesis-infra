@@ -1,5 +1,5 @@
 config:
-  target: "http://{{ $processEnvironment.TARGET_HOST }}"
+  target: "{{ $processEnvironment.TARGET_HOST }}"
   phases:
     - name: "steady-baseline-50vu"
       duration: 120
