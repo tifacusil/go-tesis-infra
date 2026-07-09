@@ -35,6 +35,11 @@ source "$SCRIPT_DIR/lib/grafana-annotate.sh"
 
 export NODE_PATH="$SCRIPT_DIR"
 
+if ! command -v artillery >/dev/null 2>&1; then
+  echo "ERROR: 'artillery' no está en PATH. Instalar con: npm install -g artillery" >&2
+  exit 1
+fi
+
 mkdir -p "$RESULTS_DIR"
 
 echo "=== Artillery endurance test (12h) — Sistema $SYSTEM ==="
@@ -48,12 +53,17 @@ echo "    Monitorear en paralelo: Grafana (throughput/latencia/CPU/mem), colas R
 echo ""
 
 region_id=$(grafana_annotate_region_start "Fase 2 · Sistema $SYSTEM · sostenida ${SUSTAINED_RATE}req/s (12h)" "fase-2" "sistema-$SYSTEM" "sustained-rate-$SUSTAINED_RATE")
+# Si la corrida de 12h muere a mitad de camino, igual queremos cerrar la
+# anotación de Grafana con la hora real de corte, no dejarla abierta para
+# siempre — de ahí el trap en vez de solo la llamada al final.
+trap 'grafana_annotate_region_end "$region_id"' EXIT
 
 TARGET_HOST="$TARGET_HOST" SUSTAINED_RATE="$SUSTAINED_RATE" artillery run \
   --output "$OUTPUT" \
   "$SCENARIO"
 
 grafana_annotate_region_end "$region_id"
+trap - EXIT
 
 echo ""
 echo "=== Corrida de 12h completada ==="

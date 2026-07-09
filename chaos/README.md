@@ -42,8 +42,15 @@ de cada servicio) y Docker Desktop corriendo (para montar `/var/run/docker.sock`
 ```
 
 Cada script imprime un resumen (MTTR, mensajes publicados vs consumidos,
-estado de breakers por target) y deja el JSON crudo de Prometheus en
-`chaos/results/<escenario>-<timestamp epoch>.json` para análisis posterior.
+estado de breakers por target) y guarda snapshots en `chaos/results/`:
+
+- `kill-rabbitmq.sh` y `pause-data-management.sh` escriben snapshots de
+  contadores como texto plano `<escenario>-{pre,post}-<timestamp epoch>.snapshot`
+  (no JSON — `key=value` por línea, ver `lib/capture.sh`'s `snapshot_counters`).
+- `netem-delay-ew-da.sh` además guarda el estado crudo de Prometheus
+  (respuesta completa de la query `ew_circuit_breaker_state`) como
+  `netem-delay-ew-da-pre-breakers.json` — es el único de los tres que
+  produce JSON.
 
 ## Nota sobre Sistema A (baseline)
 

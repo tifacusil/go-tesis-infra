@@ -5,16 +5,61 @@
 #
 # PROMETHEUS_ADDR (default http://localhost:9090) debe apuntar al Prometheus
 # de local/infra/docker-compose.observability.yml.
+#
+# Nota: este archivo NO fija `set -euo pipefail` — depende del script que lo
+# fuente. `prom_query` se usa casi siempre dentro de `state=$(prom_query ...)`
+# (sustitución de comando como valor asignado), que bash exime de `set -e`
+# incluso con `pipefail` activo: un fallo de curl/python ahí NO aborta el
+# script que llama, solo produce un valor vacío/'NaN'. Por eso _pq_python()
+# valida explícitamente el intérprete antes de usarlo, en vez de confiar en
+# que `set -e` capture el problema.
 
 PROMETHEUS_ADDR="${PROMETHEUS_ADDR:-http://localhost:9090}"
 RESULTS_DIR="${RESULTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/results}"
 mkdir -p "$RESULTS_DIR"
 
+# _pq_python — resuelve un intérprete Python que REALMENTE ejecute.
+# command -v no alcanza: en Windows, `python`/`python3` puede resolver al
+# stub de Microsoft Store (un ejecutable real en PATH que solo imprime un
+# prompt de instalación a stderr y sale con error al primer argumento) — hay
+# que probar una ejecución real. Cachea el resultado en PQ_PYTHON_BIN tras
+# la primera resolución exitosa.
+_pq_python() {
+  if [[ -n "${PQ_PYTHON_BIN:-}" ]]; then
+    echo "$PQ_PYTHON_BIN"
+    return 0
+  fi
+  local candidate
+  for candidate in python3 python py; do
+    if command -v "$candidate" >/dev/null 2>&1 && [[ "$("$candidate" -c 'print(1)' 2>/dev/null)" == "1" ]]; then
+      PQ_PYTHON_BIN="$candidate"
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # prom_query <promql> — imprime el primer valor escalar de una instant query.
+# Si Python no está disponible o curl/parseo falla, imprime 'ERR' (nunca
+# vacío) para que el caller pueda distinguir "el breaker está en 0" de
+# "no pude preguntarle a Prometheus".
 prom_query() {
-  local query="$1"
-  curl -s --get "$PROMETHEUS_ADDR/api/v1/query" --data-urlencode "query=$query" \
-    | python -c "import sys,json; d=json.load(sys.stdin); r=d['data']['result']; print(r[0]['value'][1] if r else 'NaN')"
+  local query="$1" py body
+  py=$(_pq_python) || { echo "  (prom_query: no se encontró python3/python/py en PATH)" >&2; echo "ERR"; return 1; }
+  body=$(curl -s --get --connect-timeout 3 --max-time 10 "$PROMETHEUS_ADDR/api/v1/query" --data-urlencode "query=$query") || {
+    echo "  (prom_query: curl falló contactando $PROMETHEUS_ADDR)" >&2
+    echo "ERR"
+    return 1
+  }
+  echo "$body" | "$py" -c "import sys,json
+try:
+    d = json.load(sys.stdin)
+    r = d['data']['result']
+    print(r[0]['value'][1] if r else 'NaN')
+except Exception:
+    print('ERR')
+" 2>/dev/null || { echo "ERR"; return 1; }
 }
 
 # prom_query_raw <promql> <out_file> — guarda la respuesta cruda (todas las series).
@@ -25,17 +70,30 @@ prom_query_raw() {
 
 # wait_for_breaker_closed <target> <timeout_seconds> — poll hasta que
 # ew_circuit_breaker_state{target="..."} vuelva a 0 (closed). Imprime el
-# numero de segundos transcurridos (MTTR) por stdout.
+# numero de segundos transcurridos (MTTR) por stdout en éxito.
+# Distingue dos fallos: TIMEOUT_<n>s (el breaker nunca cerró — señal real del
+# sistema bajo prueba) vs ERR_PROM_UNREACHABLE (no se pudo consultar
+# Prometheus/python — falla de tooling, no del breaker; no confundir ambas).
 wait_for_breaker_closed() {
   local target="$1" timeout="${2:-120}"
   local start=$(date +%s)
   local elapsed=0
+  local consecutive_errs=0
   while [[ "$elapsed" -lt "$timeout" ]]; do
     local state
     state=$(prom_query "ew_circuit_breaker_state{target=\"$target\"}")
     if [[ "$state" == "0" ]]; then
       echo "$elapsed"
       return 0
+    elif [[ "$state" == "ERR" ]]; then
+      consecutive_errs=$((consecutive_errs + 1))
+      if [[ "$consecutive_errs" -ge 5 ]]; then
+        echo "ERR_PROM_UNREACHABLE" >&2
+        echo "ERR_PROM_UNREACHABLE"
+        return 1
+      fi
+    else
+      consecutive_errs=0
     fi
     sleep 2
     elapsed=$(( $(date +%s) - start ))

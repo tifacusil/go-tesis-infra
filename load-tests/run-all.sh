@@ -30,6 +30,12 @@ source "$SCRIPT_DIR/lib/grafana-annotate.sh"
 # este directorio. Ver README-engine.md.
 export NODE_PATH="$SCRIPT_DIR"
 
+if ! command -v artillery >/dev/null 2>&1; then
+  echo "ERROR: 'artillery' no está en PATH. Instalar con: npm install -g artillery" >&2
+  echo "  (en Windows/Git Bash, confirmar que el prefix global de npm esté en PATH — 'npm config get prefix')" >&2
+  exit 1
+fi
+
 mkdir -p "$RESULTS_DIR"
 
 VU_LEVELS=(001 010 050 100 400)
@@ -47,12 +53,14 @@ for VU in "${VU_LEVELS[@]}"; do
   echo "    Warmup: 3 min | Medición: 7 min"
 
   region_id=$(grafana_annotate_region_start "Fase 1 · Sistema $SYSTEM · VU=$VU" "fase-1" "sistema-$SYSTEM" "vu-$VU")
+  trap 'grafana_annotate_region_end "$region_id"' EXIT
 
   TARGET_HOST="$TARGET_HOST" artillery run \
     --output "$OUTPUT" \
     "$SCENARIO"
 
   grafana_annotate_region_end "$region_id"
+  trap - EXIT
 
   echo "    Reporte: $OUTPUT"
   echo ""

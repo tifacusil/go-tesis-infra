@@ -31,6 +31,11 @@ source "$SCRIPT_DIR/lib/grafana-annotate.sh"
 
 export NODE_PATH="$SCRIPT_DIR"
 
+if ! command -v artillery >/dev/null 2>&1; then
+  echo "ERROR: 'artillery' no está en PATH. Instalar con: npm install -g artillery" >&2
+  exit 1
+fi
+
 mkdir -p "$RESULTS_DIR"
 
 BURST_SCENARIOS=(burst-10to100 burst-50to400)
@@ -47,12 +52,14 @@ for NAME in "${BURST_SCENARIOS[@]}"; do
   echo "--- [$(date '+%H:%M:%S')] Corrida ${NAME} ---"
 
   region_id=$(grafana_annotate_region_start "Burst · Sistema $SYSTEM · $NAME" "burst" "sistema-$SYSTEM" "$NAME")
+  trap 'grafana_annotate_region_end "$region_id"' EXIT
 
   TARGET_HOST="$TARGET_HOST" artillery run \
     --output "$OUTPUT" \
     "$SCENARIO"
 
   grafana_annotate_region_end "$region_id"
+  trap - EXIT
 
   echo "    Reporte: $OUTPUT"
   echo ""
