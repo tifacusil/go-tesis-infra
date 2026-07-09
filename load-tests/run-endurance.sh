@@ -2,12 +2,16 @@
 # run-endurance.sh — Fase 2 (validación de resiliencia): carga máxima sostenida
 # por 12 horas, a la tasa descubierta en Fase 1 (run-all.sh, escalones 001..400).
 #
+# Ingesta real es TCP (frames binarios DTU), no HTTP — ver README-engine.md.
+# TARGET_HOST es "host" o "host:port" de una instancia data-receiving, SIN
+# esquema http://.
+#
 # Uso:
-#   TARGET_HOST=http://192.168.1.X SUSTAINED_RATE=100 ./load-tests/run-endurance.sh
-#   TARGET_HOST=http://192.168.1.X SUSTAINED_RATE=100 SYSTEM=B ./load-tests/run-endurance.sh
+#   TARGET_HOST=192.168.1.X:5000 SUSTAINED_RATE=100 ./load-tests/run-endurance.sh
+#   TARGET_HOST=192.168.1.X:5000 SUSTAINED_RATE=100 SYSTEM=B ./load-tests/run-endurance.sh
 #
 # Variables:
-#   TARGET_HOST     IP/hostname del servidor con Nginx/Traefik (obligatorio)
+#   TARGET_HOST     host:port de data-receiving (obligatorio, sin http://)
 #   SUSTAINED_RATE  Tasa máxima de entrada (req/s) hallada en Fase 1, sin fallas (obligatorio)
 #   SYSTEM          Etiqueta para los reportes: A o B (default: A)
 #
@@ -20,7 +24,7 @@
 
 set -euo pipefail
 
-TARGET_HOST="${TARGET_HOST:?Falta TARGET_HOST. Ej: TARGET_HOST=http://192.168.1.X ./run-endurance.sh}"
+TARGET_HOST="${TARGET_HOST:?Falta TARGET_HOST. Ej: TARGET_HOST=192.168.1.X:5000 ./run-endurance.sh}"
 SUSTAINED_RATE="${SUSTAINED_RATE:?Falta SUSTAINED_RATE (tasa máxima hallada en Fase 1). Ej: SUSTAINED_RATE=100 ./run-endurance.sh}"
 SYSTEM="${SYSTEM:-A}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,6 +32,8 @@ RESULTS_DIR="$SCRIPT_DIR/results/$SYSTEM"
 SCENARIO="$SCRIPT_DIR/scenarios/vu-sustained-12h.yml"
 OUTPUT="$RESULTS_DIR/sustained-12h.json"
 source "$SCRIPT_DIR/lib/grafana-annotate.sh"
+
+export NODE_PATH="$SCRIPT_DIR"
 
 mkdir -p "$RESULTS_DIR"
 

@@ -1,5 +1,9 @@
 config:
+  # host:port de una instancia data-receiving (ingesta TCP, ver README-engine.md).
+  # TARGET_HOST debe ser "host" o "host:port" — sin esquema http://.
   target: "{{ $processEnvironment.TARGET_HOST }}"
+  engines:
+    dtu-tcp: {}
   phases:
     - name: "steady-state-50vu"
       duration: 180
@@ -7,22 +11,11 @@ config:
     - name: "measure-50vu"
       duration: 420
       arrivalRate: 50
-  http:
-    timeout: 30
 
 scenarios:
-  - name: "Ingest sensor frame"
+  - name: "Ingest GNSS frame (TCP)"
+    engine: dtu-tcp
     flow:
-      - post:
-          url: "/api/v1/data"
-          headers:
-            Content-Type: "application/json"
-          json:
-            sensor_id: "GNSS-{{ $randomInt(1, 20) }}"
-            timestamp: "{{ $isoTimestamp }}"
-            latitude: -12.046374
-            longitude: -77.042793
-            altitude: 154.3
-            displacement_x: "{{ $randomNumber(-5.0, 5.0) }}"
-            displacement_y: "{{ $randomNumber(-5.0, 5.0) }}"
-            displacement_z: "{{ $randomNumber(-2.0, 2.0) }}"
+      - send:
+          projectId: "thesis_load_test"
+          fixQuality: "rtk_fixed"

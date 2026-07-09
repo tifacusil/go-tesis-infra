@@ -55,8 +55,11 @@ en secuencia por `load-tests/run-all.sh`:
 
 ```bash
 cd tesis-infra/load-tests
-TARGET_HOST=http://<host> SYSTEM=B ./run-all.sh
+TARGET_HOST=<host>:5000 SYSTEM=B ./run-all.sh
 ```
+
+> La ingesta real es TCP (frames binarios DTU a `data-receiving:5000-5002`),
+> no HTTP — `TARGET_HOST` es `host:port` sin esquema. Ver `load-tests/README-engine.md`.
 
 | Nivel (req/s) | Archivo |
 |---|---|
@@ -118,11 +121,17 @@ Implementada en `load-tests/scenarios/vu-sustained-12h.yml`, ejecutada por
 
 ```bash
 cd tesis-infra
-TARGET_HOST=http://<host> SUSTAINED_RATE=<tasa-fase-1> SYSTEM=B \
+TARGET_HOST=<host>:5000 SUSTAINED_RATE=<tasa-fase-1> SYSTEM=B \
   ./load-tests/run-endurance.sh &
-./chaos/run-during-endurance.sh &
+GATEWAY_URL=http://<host>/api/v1/data/health ./chaos/run-during-endurance.sh &
 wait
 ```
+
+> `TARGET_HOST` es `host:port` de data-receiving, sin esquema (ingesta TCP,
+> ver `load-tests/README-engine.md`). `GATEWAY_URL` es obligatorio acá —
+> sin él, `chaos/run-during-endurance.sh` prueba el blast-radius contra el
+> gateway HTTP local del operador (`localhost`, default de `pause-data-management.sh`),
+> no contra el sistema remoto bajo carga, invalidando esa medición.
 
 | Fase interna | Duración | Propósito |
 |---|---|---|
@@ -260,7 +269,7 @@ corrida:
 Con esto, el dashboard muestra líneas/regiones verticales superpuestas a los
 paneles existentes marcando exactamente cuándo empezó y terminó cada nivel de
 la Fase 1, la ventana completa de la Fase 2, y cada una de las 3 inyecciones
-de chaos (§2.3) — visualmente correlacionable con los picos/caídas de
+de chaos (§2.5) — visualmente correlacionable con los picos/caídas de
 throughput, latencia, backlog, etc. sin adivinar por reloj.
 
 **Configuración requerida** (variables de entorno). Dos formas, elegir una:
@@ -328,6 +337,11 @@ sobre un sistema (`SYSTEM=A` o `SYSTEM=B`). Requiere Artillery instalado
 `http://localhost:9090`) y, para que las corridas queden anotadas en Grafana
 (§4), `GRAFANA_API_TOKEN` seteado.
 
+Los `run-*.sh` de `load-tests/` ya configuran `NODE_PATH` para cargar el
+engine TCP local (`load-tests/artillery-engine-dtu-tcp/`) — no requiere
+instalación aparte. Ver `load-tests/README-engine.md` si se corre
+`artillery run` directo sin pasar por estos scripts.
+
 ```bash
 cd tesis-infra
 
@@ -339,7 +353,9 @@ cd tesis-infra
 # 1. Fase de descubrimiento (§1) — ~52 min, bloqueante, corre los 5 escalones
 #    en secuencia y termina sola. Revisar cada reporte contra los criterios
 #    de falla (§1.3) antes de continuar.
-TARGET_HOST=http://<host> SYSTEM=B ./load-tests/run-all.sh
+#    TARGET_HOST es host:port de data-receiving, SIN esquema (ingesta TCP,
+#    ver load-tests/README-engine.md) — no el host del gateway HTTP.
+TARGET_HOST=<host>:5000 SYSTEM=B ./load-tests/run-all.sh
 
 # 2. Determinar SUSTAINED_RATE (§1.4) inspeccionando los reportes de (1):
 for VU in 001 010 050 100 400; do
@@ -350,10 +366,11 @@ done
 # 3. Fase de validación de resiliencia (§2) — 12h 3min, bloqueante.
 #    run-endurance.sh y el orquestador de chaos deben lanzarse JUNTOS: el
 #    chaos depende de coincidir con la ventana de carga sostenida, no de
-#    correr después.
-TARGET_HOST=http://<host> SUSTAINED_RATE=100 SYSTEM=B \
+#    correr después. GATEWAY_URL es obligatorio: sin él, el chaos prueba
+#    el gateway HTTP local del operador, no el sistema remoto bajo carga.
+TARGET_HOST=<host>:5000 SUSTAINED_RATE=100 SYSTEM=B \
   ./load-tests/run-endurance.sh &
-./chaos/run-during-endurance.sh &
+GATEWAY_URL=http://<host>/api/v1/data/health ./chaos/run-during-endurance.sh &
 wait
 
 # 4. Revisar resultado de (3) contra los criterios de éxito (§2.4):

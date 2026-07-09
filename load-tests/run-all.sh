@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 # run-all.sh — Corre las 5 corridas de Artillery (steady-state por nivel de VU).
 #
+# Ingesta real es TCP (frames binarios DTU), no HTTP — ver README-engine.md.
+# TARGET_HOST es "host" o "host:port" de una instancia data-receiving, SIN
+# esquema http://.
+#
 # Uso:
-#   TARGET_HOST=http://192.168.1.X ./load-tests/run-all.sh
-#   TARGET_HOST=http://192.168.1.X SYSTEM=B ./load-tests/run-all.sh
+#   TARGET_HOST=192.168.1.X:5000 ./load-tests/run-all.sh
+#   TARGET_HOST=192.168.1.X:5000 SYSTEM=B ./load-tests/run-all.sh
 #
 # Variables:
-#   TARGET_HOST   IP/hostname del servidor con Nginx (obligatorio)
+#   TARGET_HOST   host:port de data-receiving (obligatorio, sin http://)
 #   SYSTEM        Etiqueta para los reportes: A o B (default: A)
 #
 # Los resultados JSON se guardan en load-tests/results/<SYSTEM>/<nivel>.json
@@ -14,12 +18,17 @@
 
 set -euo pipefail
 
-TARGET_HOST="${TARGET_HOST:?Falta TARGET_HOST. Ej: TARGET_HOST=http://192.168.1.X ./run-all.sh}"
+TARGET_HOST="${TARGET_HOST:?Falta TARGET_HOST. Ej: TARGET_HOST=192.168.1.X:5000 ./run-all.sh}"
 SYSTEM="${SYSTEM:-A}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/results/$SYSTEM"
 SCENARIOS_DIR="$SCRIPT_DIR/scenarios"
 source "$SCRIPT_DIR/lib/grafana-annotate.sh"
+
+# El engine dtu-tcp es local (no publicado a npm) — Artillery lo resuelve vía
+# `require('artillery-engine-dtu-tcp')`, que necesita NODE_PATH apuntando a
+# este directorio. Ver README-engine.md.
+export NODE_PATH="$SCRIPT_DIR"
 
 mkdir -p "$RESULTS_DIR"
 

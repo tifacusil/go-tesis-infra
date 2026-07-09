@@ -5,12 +5,16 @@
 # comportamiento steady-state ya medido (throughput/latencia/CPU/mem durante
 # el spike vs. sostenido). Ver El Fellah et al. (2026), trabajo futuro.
 #
+# Ingesta real es TCP (frames binarios DTU), no HTTP — ver README-engine.md.
+# TARGET_HOST es "host" o "host:port" de una instancia data-receiving, SIN
+# esquema http://.
+#
 # Uso:
-#   TARGET_HOST=http://192.168.1.X ./load-tests/run-all-burst.sh
-#   TARGET_HOST=http://192.168.1.X SYSTEM=B ./load-tests/run-all-burst.sh
+#   TARGET_HOST=192.168.1.X:5000 ./load-tests/run-all-burst.sh
+#   TARGET_HOST=192.168.1.X:5000 SYSTEM=B ./load-tests/run-all-burst.sh
 #
 # Variables:
-#   TARGET_HOST   IP/hostname del servidor con Nginx/Traefik (obligatorio)
+#   TARGET_HOST   host:port de data-receiving (obligatorio, sin http://)
 #   SYSTEM        Etiqueta para los reportes: A o B (default: A)
 #
 # Los resultados JSON se guardan en load-tests/results/<SYSTEM>/burst-<nivel>.json
@@ -18,11 +22,14 @@
 
 set -euo pipefail
 
-TARGET_HOST="${TARGET_HOST:?Falta TARGET_HOST. Ej: TARGET_HOST=http://192.168.1.X ./run-all-burst.sh}"
+TARGET_HOST="${TARGET_HOST:?Falta TARGET_HOST. Ej: TARGET_HOST=192.168.1.X:5000 ./run-all-burst.sh}"
 SYSTEM="${SYSTEM:-A}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/results/$SYSTEM"
 SCENARIOS_DIR="$SCRIPT_DIR/scenarios"
+source "$SCRIPT_DIR/lib/grafana-annotate.sh"
+
+export NODE_PATH="$SCRIPT_DIR"
 
 mkdir -p "$RESULTS_DIR"
 
@@ -39,9 +46,13 @@ for NAME in "${BURST_SCENARIOS[@]}"; do
 
   echo "--- [$(date '+%H:%M:%S')] Corrida ${NAME} ---"
 
+  region_id=$(grafana_annotate_region_start "Burst · Sistema $SYSTEM · $NAME" "burst" "sistema-$SYSTEM" "$NAME")
+
   TARGET_HOST="$TARGET_HOST" artillery run \
     --output "$OUTPUT" \
     "$SCENARIO"
+
+  grafana_annotate_region_end "$region_id"
 
   echo "    Reporte: $OUTPUT"
   echo ""
