@@ -67,11 +67,15 @@ grafana_annotate_region_end() {
   if [[ -z "${GRAFANA_API_TOKEN:-}" ]]; then
     return 0
   fi
-  curl -s -X PATCH "$GRAFANA_URL/api/annotations/$id" \
+  local http_code
+  http_code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 5 \
+    -X PATCH "$GRAFANA_URL/api/annotations/$id" \
     -H "Authorization: Bearer $GRAFANA_API_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"timeEnd\": $(date +%s%3N)}" \
-    -o /dev/null || echo "  (grafana-annotate: fallo al cerrar región $id, no bloqueante)" >&2
+    -d "{\"timeEnd\": $(date +%s%3N)}") || http_code="curl_error(${?})"
+  if [[ "$http_code" != "200" ]]; then
+    echo "  (grafana-annotate: fallo al cerrar región $id, no bloqueante — GRAFANA_URL=$GRAFANA_URL http_code=$http_code)" >&2
+  fi
 }
 
 _grafana_post() {
@@ -81,9 +85,18 @@ _grafana_post() {
     echo "{}"
     return 0
   fi
-  curl -s -X POST "$GRAFANA_URL/api/annotations" \
+  local body http_code
+  body=$(curl -s -w '\n%{http_code}' --connect-timeout 3 --max-time 5 \
+    -X POST "$GRAFANA_URL/api/annotations" \
     -H "Authorization: Bearer $GRAFANA_API_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"time\": $time, \"text\": \"$text\", \"tags\": $tags_json}" \
-    || echo "  (grafana-annotate: fallo al anotar, no bloqueante: $text)" >&2
+    -d "{\"time\": $time, \"text\": \"$text\", \"tags\": $tags_json}") || body=$'\ncurl_error'
+  http_code="${body##*$'\n'}"
+  body="${body%$'\n'*}"
+  if [[ "$http_code" != "200" ]]; then
+    echo "  (grafana-annotate: fallo al anotar, no bloqueante — GRAFANA_URL=$GRAFANA_URL http_code=$http_code body=$body texto=\"$text\")" >&2
+    echo "{}"
+    return 0
+  fi
+  echo "$body"
 }
