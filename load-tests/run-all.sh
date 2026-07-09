@@ -34,7 +34,7 @@ for VU in "${VU_LEVELS[@]}"; do
   OUTPUT="$RESULTS_DIR/vu-${VU}.json"
 
   echo "--- [$(date '+%H:%M:%S')] Corrida VU=${VU} ---"
-  echo "    Warmup: 2 min | Medición: 5 min"
+  echo "    Warmup: 3 min | Medición: 7 min"
 
   TARGET_HOST="$TARGET_HOST" artillery run \
     --output "$OUTPUT" \

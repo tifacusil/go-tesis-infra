@@ -1,9 +1,15 @@
 config:
-  # Apunta al Nginx del servidor (ajustar IP/hostname del servidor)
   target: "http://{{ $processEnvironment.TARGET_HOST }}"
+  phases:
+    - name: "ramp-up"
+      duration: 180                                            # 3 min de warmup silencioso
+      arrivalRate: 1
+      rampTo: "{{ $processEnvironment.SUSTAINED_RATE }}"
+    - name: "sustained-load-12h"
+      duration: 43200                                           # 12 h a la tasa máxima descubierta en Fase 1
+      arrivalRate: "{{ $processEnvironment.SUSTAINED_RATE }}"
   http:
     timeout: 30
-  # Artillery reporta p50/p95/p99 por defecto
   plugins:
     metrics-by-endpoint: {}
 
@@ -23,6 +29,3 @@ scenarios:
             displacement_x: "{{ $randomNumber(-5.0, 5.0) }}"
             displacement_y: "{{ $randomNumber(-5.0, 5.0) }}"
             displacement_z: "{{ $randomNumber(-2.0, 2.0) }}"
-          capture:
-            - json: "$.message_id"
-              as: "message_id"

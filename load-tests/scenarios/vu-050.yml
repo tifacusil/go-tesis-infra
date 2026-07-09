@@ -2,10 +2,10 @@ config:
   target: "http://{{ $processEnvironment.TARGET_HOST }}"
   phases:
     - name: "steady-state-50vu"
-      duration: 120
+      duration: 180
       arrivalRate: 50
     - name: "measure-50vu"
-      duration: 300
+      duration: 420
       arrivalRate: 50
   http:
     timeout: 30

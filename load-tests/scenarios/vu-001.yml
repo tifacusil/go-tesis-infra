@@ -2,10 +2,10 @@ config:
   target: "http://{{ $processEnvironment.TARGET_HOST }}"
   phases:
     - name: "steady-state-1vu"
-      duration: 120    # 2 min de warmup silencioso
+      duration: 180    # 3 min de warmup silencioso
       arrivalRate: 1
     - name: "measure-1vu"
-      duration: 300    # 5 min de medición real
+      duration: 420    # 7 min de medición real
       arrivalRate: 1
   http:
     timeout: 30
