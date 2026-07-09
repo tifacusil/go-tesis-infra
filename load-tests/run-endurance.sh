@@ -27,6 +27,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/results/$SYSTEM"
 SCENARIO="$SCRIPT_DIR/scenarios/vu-sustained-12h.yml"
 OUTPUT="$RESULTS_DIR/sustained-12h.json"
+source "$SCRIPT_DIR/lib/grafana-annotate.sh"
 
 mkdir -p "$RESULTS_DIR"
 
@@ -40,9 +41,13 @@ echo "    Corrida inicia [$(date '+%Y-%m-%d %H:%M:%S')], termina ~$(date -d '+12
 echo "    Monitorear en paralelo: Grafana (throughput/latencia/CPU/mem), colas RabbitMQ, backlog Redis."
 echo ""
 
+region_id=$(grafana_annotate_region_start "Fase 2 · Sistema $SYSTEM · sostenida ${SUSTAINED_RATE}req/s (12h)" "fase-2" "sistema-$SYSTEM" "sustained-rate-$SUSTAINED_RATE")
+
 TARGET_HOST="$TARGET_HOST" SUSTAINED_RATE="$SUSTAINED_RATE" artillery run \
   --output "$OUTPUT" \
   "$SCENARIO"
+
+grafana_annotate_region_end "$region_id"
 
 echo ""
 echo "=== Corrida de 12h completada ==="

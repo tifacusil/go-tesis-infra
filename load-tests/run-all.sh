@@ -19,6 +19,7 @@ SYSTEM="${SYSTEM:-A}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/results/$SYSTEM"
 SCENARIOS_DIR="$SCRIPT_DIR/scenarios"
+source "$SCRIPT_DIR/lib/grafana-annotate.sh"
 
 mkdir -p "$RESULTS_DIR"
 
@@ -36,9 +37,13 @@ for VU in "${VU_LEVELS[@]}"; do
   echo "--- [$(date '+%H:%M:%S')] Corrida VU=${VU} ---"
   echo "    Warmup: 3 min | Medición: 7 min"
 
+  region_id=$(grafana_annotate_region_start "Fase 1 · Sistema $SYSTEM · VU=$VU" "fase-1" "sistema-$SYSTEM" "vu-$VU")
+
   TARGET_HOST="$TARGET_HOST" artillery run \
     --output "$OUTPUT" \
     "$SCENARIO"
+
+  grafana_annotate_region_end "$region_id"
 
   echo "    Reporte: $OUTPUT"
   echo ""

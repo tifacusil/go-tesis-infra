@@ -11,6 +11,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/capture.sh"
+source "$SCRIPT_DIR/../load-tests/lib/grafana-annotate.sh"
 
 TARGET_CONTAINER="rabbitmq-1"
 LABEL="kill-rabbitmq"
@@ -20,6 +21,8 @@ echo "=== Escenario: kill $TARGET_CONTAINER ==="
 echo "--- Snapshot pre-fallo ---"
 pre_snapshot=$(snapshot_counters "${LABEL}-pre")
 cat "$pre_snapshot"
+
+region_id=$(grafana_annotate_region_start "Chaos · kill-rabbitmq" "chaos" "kill-rabbitmq")
 
 echo ""
 echo "--- Inyectando fallo (pumba kill, SIGKILL) ---"
@@ -47,6 +50,8 @@ sleep 30
 echo "--- Snapshot post-recuperacion ---"
 post_snapshot=$(snapshot_counters "${LABEL}-post")
 cat "$post_snapshot"
+
+grafana_annotate_region_end "$region_id"
 
 echo ""
 echo "=== Resumen ==="

@@ -84,7 +84,7 @@ observa cualquiera de:
 | Caída de instancia | cualquier réplica no pasa `readinessProbe`/health durante la corrida | logs / Consul o K8s |
 
 Si ninguna señal se dispara en el nivel 400, ese es el techo probado (no hay
-niveles más altos definidos aún — ver §5 para extender el escalón).
+niveles más altos definidos aún — ver §6 para extender el escalón).
 
 ### 1.4 Salida de la fase
 
@@ -206,7 +206,7 @@ Fase 1 (descubrimiento, ~52 min: 5 × 10min + 4 × 30s pausa)
   ↓
   ¿algún nivel dispara criterio de falla (§1.3)?
     sí → SUSTAINED_RATE = último nivel sin falla
-    no → SUSTAINED_RATE = 400 (techo probado; considerar extender escalón, §5)
+    no → SUSTAINED_RATE = 400 (techo probado; considerar extender escalón, §6)
   ↓
 Fase 2 (validación, 12h 3min)
   run-endurance.sh SUSTAINED_RATE=<valor>   [+ en paralelo] chaos/run-during-endurance.sh
@@ -225,16 +225,103 @@ Fase 2 (validación, 12h 3min)
 
 ---
 
-## 4. Ejecución — orden de comandos
+## 4. Registro en Grafana
+
+El dashboard `Sistem Metrics Dashboard` (`local/infra/grafana/provisioning/dashboards/dashboard.json`,
+auto-provisioned) ya expone los paneles A vs B necesarios (CPU, memoria,
+throughput, latencia p50-p99, backlog Redis, cola RabbitMQ, gRPC, TCP). Lo que
+falta para usarlo como registro de las 2 fases es poder **ubicar en el tiempo**
+cada corrida — el dashboard por defecto muestra `now-3h`, y una corrida de 12h
+o un escalón de 10 min corrido la semana pasada no se distinguen del resto del
+historial sin un punto de referencia.
+
+### 4.1 Anotaciones automáticas por corrida/inyección
+
+`load-tests/lib/grafana-annotate.sh` (helper compartido, mismo patrón que
+`chaos/lib/capture.sh`) marca vía la API de anotaciones de Grafana
+(`POST /api/annotations`) el inicio y fin de cada ventana relevante. Ya está
+integrado en los scripts existentes — no requiere pasos manuales durante la
+corrida:
+
+| Script | Anotación | Tags |
+|---|---|---|
+| `run-all.sh` | una región por cada nivel VU de la Fase 1 | `fase-1`, `sistema-<A\|B>`, `vu-<nivel>` |
+| `run-endurance.sh` | una región cubriendo toda la Fase 2 (12h) | `fase-2`, `sistema-<A\|B>`, `sustained-rate-<valor>` |
+| `kill-rabbitmq.sh` | una región por la ventana de fallo+recuperación | `chaos`, `kill-rabbitmq` |
+| `pause-data-management.sh` | ídem | `chaos`, `pause-data-management` |
+| `netem-delay-ew-da.sh` | ídem | `chaos`, `netem-delay-ew-da` |
+
+Con esto, el dashboard muestra líneas/regiones verticales superpuestas a los
+paneles existentes marcando exactamente cuándo empezó y terminó cada nivel de
+la Fase 1, la ventana completa de la Fase 2, y cada una de las 3 inyecciones
+de chaos (§2.3) — visualmente correlacionable con los picos/caídas de
+throughput, latencia, backlog, etc. sin adivinar por reloj.
+
+**Configuración requerida** (variables de entorno, mismo patrón que
+`TARGET_HOST`/`SUSTAINED_RATE`):
+
+```bash
+export GRAFANA_URL="http://grafana:3000"        # default si se omite; misma red landslide-net
+export GRAFANA_API_TOKEN="<service-account-token>"  # obligatorio para que se registren anotaciones
+```
+
+El token se genera una vez en Grafana: **Administration → Service accounts →
+Add service account** (rol `Editor` alcanza) **→ Add service account token**.
+Si `GRAFANA_API_TOKEN` no está seteado, los scripts no fallan — imprimen un
+aviso y continúan sin anotar (la anotación es soporte de análisis, no
+precondición del experimento).
+
+### 4.2 Filtrar el dashboard por fase/corrida
+
+Con las anotaciones cargadas, en Grafana:
+
+1. Ajustar el rango de tiempo del dashboard a la ventana de la corrida de
+   interés (ej. las 12h de una corrida de Fase 2 específica).
+2. Las anotaciones aparecen como marcadores verticales con su tag — filtrables
+   desde **Dashboard settings → Annotations** o pasando `tags=fase-2` /
+   `tags=sistema-B` en la query de anotaciones si se agrega una fuente de
+   anotaciones adicional (por ahora se usa la anotación nativa `-- Grafana --`
+   ya presente en `dashboard.json`, que muestra todas; filtrar por tag es un
+   ajuste de UI, no requiere cambiar el JSON).
+
+### 4.3 Persistir los números más allá del retention de Prometheus
+
+Prometheus retiene 30 días (`--storage.tsdb.retention.time=30d`,
+`docker-compose.observability.yml`). Para una tesis que puede tomar semanas
+en redactarse tras la última corrida, eso no alcanza como archivo final:
+
+- **Reporte HTML de Artillery** (`artillery report <archivo>.json`) — ya
+  queda como artefacto local en `load-tests/results/<SYSTEM>/`, independiente
+  de Prometheus. Es la fuente primaria de throughput/latencia/errores por
+  corrida.
+- **Snapshot de Grafana** (ícono compartir → Snapshot, o `POST
+  /api/snapshots`) — congela el estado exacto de los paneles (incluidas las
+  anotaciones) en una URL/JSON que sobrevive aunque Prometheus rote los datos
+  crudos. Tomar uno al terminar cada corrida de Fase 2 (12h) y cada inyección
+  de chaos relevante.
+- **Export CSV por panel** (menú del panel → Inspect → Data → Download CSV) —
+  para los paneles puntuales que alimenten tablas/gráficas del documento de
+  tesis.
+
+---
+
+## 5. Ejecución — orden de comandos
 
 Comandos reales, en el orden exacto en que se corren, para una pasada completa
 sobre un sistema (`SYSTEM=A` o `SYSTEM=B`). Requiere Artillery instalado
 (`npm install -g artillery`), Docker corriendo (Pumba, para los scripts de
-`chaos/`) y Prometheus accesible (`PROMETHEUS_ADDR`, default
-`http://localhost:9090`).
+`chaos/`), Prometheus accesible (`PROMETHEUS_ADDR`, default
+`http://localhost:9090`) y, para que las corridas queden anotadas en Grafana
+(§4), `GRAFANA_API_TOKEN` seteado.
 
 ```bash
 cd tesis-infra
+
+# 0. Habilitar anotaciones en Grafana para toda la sesión (§4.1) — opcional
+#    pero recomendado; sin esto los scripts corren igual, solo sin marcar
+#    el dashboard.
+export GRAFANA_URL="http://grafana:3000"
+export GRAFANA_API_TOKEN="<service-account-token>"
 
 # 1. Fase de descubrimiento (§1) — ~52 min, bloqueante, corre los 5 escalones
 #    en secuencia y termina sola. Revisar cada reporte contra los criterios
@@ -274,7 +361,7 @@ de este plan.
 
 ---
 
-## 5. Extensiones futuras (fuera de alcance actual)
+## 6. Extensiones futuras (fuera de alcance actual)
 
 - Escalón por encima de 400 req/s si esa corrida no dispara ningún criterio de
   falla en la Fase 1 (agregar `vu-800.yml`, etc.).

@@ -10,6 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/capture.sh"
+source "$SCRIPT_DIR/../load-tests/lib/grafana-annotate.sh"
 
 TARGET_CONTAINER="data-analysis-1"
 DELAY_MS="${1:-2000}"
@@ -22,6 +23,8 @@ echo "--- Snapshot pre-fallo (incluye estado de breakers) ---"
 pre_snapshot=$(snapshot_counters "${LABEL}-pre")
 cat "$pre_snapshot"
 prom_query_raw 'ew_circuit_breaker_state' "$RESULTS_DIR/${LABEL}-pre-breakers.json"
+
+region_id=$(grafana_annotate_region_start "Chaos · netem-delay-ew-da (${DELAY_MS}ms, ${DURATION}s)" "chaos" "netem-delay-ew-da")
 
 echo ""
 echo "--- Inyectando latencia (pumba netem delay ${DELAY_MS}ms) por ${DURATION}s ---"
@@ -52,6 +55,8 @@ echo "MTTR (breaker vuelve a closed): ${mttr}s"
 echo "--- Snapshot post-recuperacion ---"
 post_snapshot=$(snapshot_counters "${LABEL}-post")
 cat "$post_snapshot"
+
+grafana_annotate_region_end "$region_id"
 
 echo ""
 echo "=== Resumen ==="

@@ -10,6 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/capture.sh"
+source "$SCRIPT_DIR/../load-tests/lib/grafana-annotate.sh"
 
 TARGET_CONTAINER="data-management-1"
 DURATION="${1:-30}"
@@ -21,6 +22,8 @@ echo "=== Escenario: pause $TARGET_CONTAINER (${DURATION}s) ==="
 echo "--- Snapshot pre-fallo ---"
 pre_snapshot=$(snapshot_counters "${LABEL}-pre")
 cat "$pre_snapshot"
+
+region_id=$(grafana_annotate_region_start "Chaos · pause-data-management (${DURATION}s)" "chaos" "pause-data-management")
 
 echo ""
 echo "--- Pausando $TARGET_CONTAINER (pumba pause, SIGSTOP) por ${DURATION}s ---"
@@ -48,6 +51,8 @@ wait "$pumba_pid"
 echo "--- Snapshot post-recuperacion ---"
 post_snapshot=$(snapshot_counters "${LABEL}-post")
 cat "$post_snapshot"
+
+grafana_annotate_region_end "$region_id"
 
 echo ""
 echo "=== Resumen (blast radius) ==="
