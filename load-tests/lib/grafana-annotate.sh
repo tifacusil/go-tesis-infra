@@ -5,7 +5,10 @@
 # del resto del historial una vez pasa la ventana de "now-3h" del dashboard,
 # y el retention de 30d de Prometheus eventualmente borra el contexto.
 #
-# GRAFANA_URL          default http://grafana:3000 (misma red landslide-net)
+# GRAFANA_URL          default http://localhost:3000 — Grafana corre local
+#                       (en la máquina donde se ejecutan estos scripts), no
+#                       en el servidor remoto donde vive TARGET_HOST/Prometheus.
+#                       Ajustar solo si Grafana corre en otro host/puerto.
 # GRAFANA_API_TOKEN    obligatorio — Service Account token de Grafana
 #                       (Administration > Service accounts > Add service
 #                       account token; scope de Editor alcanza para anotar)
@@ -26,7 +29,7 @@ if [[ -f "$_grafana_annotate_env_file" ]]; then
   set +a
 fi
 
-GRAFANA_URL="${GRAFANA_URL:-http://grafana:3000}"
+GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
 
 # grafana_annotate <text> <tag> [tag...] — anotación puntual (un instante).
 grafana_annotate() {

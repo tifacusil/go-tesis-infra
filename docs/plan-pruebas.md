@@ -235,6 +235,12 @@ cada corrida — el dashboard por defecto muestra `now-3h`, y una corrida de 12h
 o un escalón de 10 min corrido la semana pasada no se distinguen del resto del
 historial sin un punto de referencia.
 
+**Topología asumida:** Grafana corre **local** (en la máquina de quien ejecuta
+los scripts, ej. `docker-compose.local.yml`), con Prometheus del servidor
+remoto (`TARGET_HOST`) configurado como datasource. Los scripts de
+`load-tests/`/`chaos/` corren en esa misma máquina local y llaman a la API de
+Grafana en `localhost` — nunca cruzan a la red del servidor para anotar.
+
 ### 4.1 Anotaciones automáticas por corrida/inyección
 
 `load-tests/lib/grafana-annotate.sh` (helper compartido, mismo patrón que
@@ -268,7 +274,7 @@ throughput, latencia, backlog, etc. sin adivinar por reloj.
   `TARGET_HOST`/`SUSTAINED_RATE`:
 
   ```bash
-  export GRAFANA_URL="http://grafana:3000"            # default si se omite; misma red landslide-net
+  export GRAFANA_URL="http://localhost:3000"          # default si se omite; Grafana corre local
   export GRAFANA_API_TOKEN="<service-account-token>"  # obligatorio para que se registren anotaciones
   ```
 
