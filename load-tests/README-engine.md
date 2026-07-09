@@ -41,9 +41,14 @@ it in a different terminal or after Artillery has already started has no effect.
 ## Target format changed
 
 Scenarios using this engine set `config.target: "<host>:<port>"` (e.g.
-`204.168.203.32:5000`) — **not** a `http://` URL. `TARGET_HOST` env var should
-now be exported as bare `host` (or `host:port` if overriding the default
-port), not `http://host`. See each scenario's `config.target` line.
+`204.168.203.32:5000`) — ingestion is TCP, not HTTP, so `TARGET_HOST` should
+be exported as bare `host:port` (or just `host`, defaults to port `5000`).
+
+For convenience, `TARGET_HOST=http://204.168.203.32` or
+`https://204.168.203.32:5000` also work — the engine strips a leading
+`http(s)://` if present, since that was the pattern used before the TCP
+migration and is easy to type out of habit. It's still not a real HTTP
+request under the hood; the scheme is just ignored.
 
 ## Verifying the engine works before a real run
 

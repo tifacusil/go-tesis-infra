@@ -21,6 +21,7 @@ const { buildGnssFrame, parseAck } = require('./dtu-frame');
 
 const ACK_TIMEOUT_MS = 5000;
 const CONNECT_TIMEOUT_MS = 5000;
+const DEFAULT_PORT = 5000; // puerto TCP de data-receiving-1 (ver docker-compose.yml de tesis-infra)
 
 class DtuTcpEngine {
   constructor(script, ee, helpers) {
@@ -88,10 +89,15 @@ function resolveField(spec, key, context, helpers, fallback) {
 }
 
 function sendGnssFrame(target, spec, context, helpers, ee, callback) {
-  const [host, portStr] = String(target).split(':');
-  const port = Number(portStr);
+  // Tolerar TARGET_HOST=http://host:port o https://host:port por costumbre
+  // (el resto del repo usaba ese formato antes de la migración a TCP) —
+  // la ingesta real es TCP puro, sin esquema, pero fallar duro acá solo
+  // porque alguien copió el viejo patrón de uso es un costo innecesario.
+  const withoutScheme = String(target).replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  const [host, portStr] = withoutScheme.split(':');
+  const port = portStr === undefined ? DEFAULT_PORT : Number(portStr);
   if (!host || !Number.isFinite(port)) {
-    const err = new Error(`invalid target "${target}", expected "host:port"`);
+    const err = new Error(`invalid target "${target}", expected "host:port" (ingesta TCP, sin esquema http://) or "host" to use the default port ${DEFAULT_PORT}`);
     ee.emit('error', 'invalid_target');
     return callback(err, context);
   }
