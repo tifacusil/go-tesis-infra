@@ -1546,7 +1546,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Solo Sistema B. Profundidad de la cola sensors.raw en RabbitMQ (mensajes listos para consumir, via rabbitmq-exporter). Un crecimiento sostenido indica que los consumidores (data-management/early-warning) no drenan al ritmo de publicacion — el cuello de botella real de la ingesta.",
+      "description": "Solo Sistema B. Profundidad de las colas consumidoras en RabbitMQ (mensajes listos para consumir, via rabbitmq-exporter), desglosada por cola: data_management.persist y early_warning.evaluate (ambas alimentadas por el exchange sensors.raw — sensors.raw NO es una cola, no tiene profundidad propia). Un crecimiento sostenido en alguna indica que ese consumidor (data-management o early-warning) no drena al ritmo de publicacion — el cuello de botella real de la ingesta.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1633,8 +1633,8 @@
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "sum(rabbitmq_queue_messages_ready{queue=\"sensors.raw\"})",
-          "legendFormat": "ready (sensors.raw)",
+          "expr": "sum by (queue) (rabbitmq_queue_messages_ready{queue=~\"data_management.persist|early_warning.evaluate\"})",
+          "legendFormat": "ready ({{queue}})",
           "range": true,
           "refId": "A"
         },
@@ -1650,7 +1650,7 @@
           "refId": "B"
         }
       ],
-      "title": "Sist B - RabbitMQ: profundidad de cola / mensajes sin ack",
+      "title": "Sist B - RabbitMQ: profundidad de colas / mensajes sin ack",
       "type": "timeseries"
     }
   ],
