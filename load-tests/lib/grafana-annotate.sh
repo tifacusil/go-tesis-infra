@@ -13,6 +13,18 @@
 # Si GRAFANA_API_TOKEN no está seteado, las funciones no fallan la corrida:
 # imprimen un aviso y siguen (la anotación es soporte para el análisis
 # posterior, no una precondición del experimento).
+#
+# Carga load-tests/.env si existe (ver load-tests/.env.example), sin
+# pisar variables ya exportadas en el entorno (ej. por CI o export manual).
+
+_grafana_annotate_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_grafana_annotate_env_file="$(cd "$_grafana_annotate_lib_dir/.." && pwd)/.env"
+if [[ -f "$_grafana_annotate_env_file" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$_grafana_annotate_env_file"
+  set +a
+fi
 
 GRAFANA_URL="${GRAFANA_URL:-http://grafana:3000}"
 

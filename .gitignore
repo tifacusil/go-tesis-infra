@@ -4,6 +4,10 @@
 # Excepto .env.example
 !**/envs/**/*.env.example
 
+# .env de load-tests/ (GRAFANA_API_TOKEN, etc.) — nunca commitear con valores reales
+load-tests/.env
+!load-tests/.env.example
+
 # Resultados de Artillery (JSONs y HTMLs generados — no van al repo)
 load-tests/results/*/
 !load-tests/results/.gitkeep

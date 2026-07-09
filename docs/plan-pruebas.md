@@ -257,19 +257,27 @@ la Fase 1, la ventana completa de la Fase 2, y cada una de las 3 inyecciones
 de chaos (§2.3) — visualmente correlacionable con los picos/caídas de
 throughput, latencia, backlog, etc. sin adivinar por reloj.
 
-**Configuración requerida** (variables de entorno, mismo patrón que
-`TARGET_HOST`/`SUSTAINED_RATE`):
+**Configuración requerida** (variables de entorno). Dos formas, elegir una:
 
-```bash
-export GRAFANA_URL="http://grafana:3000"        # default si se omite; misma red landslide-net
-export GRAFANA_API_TOKEN="<service-account-token>"  # obligatorio para que se registren anotaciones
-```
+- **`load-tests/.env`** (recomendado para uso repetido): copiar
+  `load-tests/.env.example` → `load-tests/.env` y completar `GRAFANA_API_TOKEN`.
+  `grafana-annotate.sh` lo carga automáticamente si existe — no hace falta
+  `export` manual en cada sesión de shell. **Nunca se commitea** (cubierto por
+  `.gitignore`, mismo trato que `envs/*.env`).
+- **`export` manual** (para una sola corrida puntual), mismo patrón que
+  `TARGET_HOST`/`SUSTAINED_RATE`:
 
-El token se genera una vez en Grafana: **Administration → Service accounts →
-Add service account** (rol `Editor` alcanza) **→ Add service account token**.
-Si `GRAFANA_API_TOKEN` no está seteado, los scripts no fallan — imprimen un
-aviso y continúan sin anotar (la anotación es soporte de análisis, no
-precondición del experimento).
+  ```bash
+  export GRAFANA_URL="http://grafana:3000"            # default si se omite; misma red landslide-net
+  export GRAFANA_API_TOKEN="<service-account-token>"  # obligatorio para que se registren anotaciones
+  ```
+
+El token se genera una vez en Grafana: **Administration → Users and access →
+Service accounts → Add service account** (rol `Editor` alcanza) **→ Add
+service account token**. Guardarlo en un gestor de contraseñas, no solo en el
+`.env` local. Si `GRAFANA_API_TOKEN` no está seteado (ni por `.env` ni por
+`export`), los scripts no fallan — imprimen un aviso y continúan sin anotar
+(la anotación es soporte de análisis, no precondición del experimento).
 
 ### 4.2 Filtrar el dashboard por fase/corrida
 
@@ -317,11 +325,10 @@ sobre un sistema (`SYSTEM=A` o `SYSTEM=B`). Requiere Artillery instalado
 ```bash
 cd tesis-infra
 
-# 0. Habilitar anotaciones en Grafana para toda la sesión (§4.1) — opcional
-#    pero recomendado; sin esto los scripts corren igual, solo sin marcar
-#    el dashboard.
-export GRAFANA_URL="http://grafana:3000"
-export GRAFANA_API_TOKEN="<service-account-token>"
+# 0. Habilitar anotaciones en Grafana (§4.1) — opcional pero recomendado;
+#    sin esto los scripts corren igual, solo sin marcar el dashboard.
+#    Una vez: cp load-tests/.env.example load-tests/.env && editar el token.
+#    Se carga solo; no hace falta export en cada sesión.
 
 # 1. Fase de descubrimiento (§1) — ~52 min, bloqueante, corre los 5 escalones
 #    en secuencia y termina sola. Revisar cada reporte contra los criterios
