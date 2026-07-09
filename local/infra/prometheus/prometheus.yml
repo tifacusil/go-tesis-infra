@@ -33,21 +33,26 @@ scrape_configs:
     static_configs:
       - targets: ['redis-exporter:9121']
 
-  # ── Microservicios Go (/metrics via prometheus/client_golang) ──────────────
+  # ── Microservicios (/metrics — Go via prometheus/client_golang, data-analysis
+  #    via FastAPI/uvicorn en Python) ──────────────────────────────────────────
   # Cada microservicio se registra en Consul; en local usamos static_configs.
-  # Ajustar puertos según docker-compose de servicios.
+  # Todos exponen /metrics en el puerto INTERNO 8080 del contenedor (mismo
+  # router/mux que /health) — el mapeo host:container en cada docker-compose.yml
+  # de local/services/*/  varía por instancia (8083:8080, 8087:8080, etc.), pero
+  # Prometheus scrapea por hostname de contenedor sobre landslide-net, así que
+  # siempre es el lado derecho (container) el que importa: 8080 en los 6.
   - job_name: microservices
     metrics_path: /metrics
     static_configs:
-      - targets: ['data-receiving-1:8080']
+      - targets: ['data-receiving-1:8080', 'data-receiving-2:8080', 'data-receiving-3:8080']
         labels: {service: data-receiving, component: microservice}
-      - targets: ['data-management-1:8081']
+      - targets: ['data-management-1:8080', 'data-management-2:8080']
         labels: {service: data-management, component: microservice}
-      - targets: ['data-analysis-1:8082']
+      - targets: ['data-analysis-1:8080', 'data-analysis-2:8080']
         labels: {service: data-analysis, component: microservice}
-      - targets: ['early-warning-1:8083']
+      - targets: ['early-warning-1:8080', 'early-warning-2:8080']
         labels: {service: early-warning, component: microservice}
-      - targets: ['user-management-1:8084']
+      - targets: ['user-management-1:8080']
         labels: {service: user-management, component: microservice}
-      - targets: ['project-management-1:8085']
+      - targets: ['project-management-1:8080']
         labels: {service: project-management, component: microservice}
