@@ -17,5 +17,4 @@ scenarios:
     engine: dtu-tcp
     flow:
       - send:
-          projectId: "thesis_load_test"
-          fixQuality: "rtk_fixed"
+          sensorType: "gnss"  # identity (project_id, sensor_id) viene del contract example de dtu-emulator — ver README-engine.md

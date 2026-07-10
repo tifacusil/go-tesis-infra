@@ -15,13 +15,48 @@
 //   - must ee.emit('started') when a VU scenario begins (pendingScenarios bookkeeping)
 //   - ee.emit('counter', name, value) / ee.emit('error', code) feed Artillery's stats;
 //     there is no dedicated success/response event for non-HTTP engines.
+//
+// Frame building/sending is delegated to dtu-emulator (Python sender at
+// ../../dtu-emulator relative to this repo's checkout, or DTU_EMULATOR_PATH) —
+// see README-engine.md. Each `send` step spawns one `python -m sender fixture
+// --count 1` subprocess against the contract example for the requested sensor
+// type and parses its ACK log line. This means measured round-trip latency
+// includes Python interpreter startup, not just network + server time — an
+// accepted tradeoff for reusing dtu-emulator's canonical, contract-validated
+// frame encoding instead of re-deriving it in JS.
 
-const net = require('net');
-const { buildGnssFrame, parseAck } = require('./dtu-frame');
+const path = require('path');
+const { spawnSync, execFile } = require('child_process');
 
 const ACK_TIMEOUT_MS = 5000;
-const CONNECT_TIMEOUT_MS = 5000;
 const DEFAULT_PORT = 5000; // puerto TCP de data-receiving-1 (ver docker-compose.yml de tesis-infra)
+const DEFAULT_SENSOR_TYPE = 'gnss';
+
+const DTU_EMULATOR_PATH = path.resolve(
+  process.env.DTU_EMULATOR_PATH || path.join(__dirname, '..', '..', '..', 'dtu-emulator')
+);
+const DTU_EMULATOR_SRC = path.join(DTU_EMULATOR_PATH, 'src');
+
+const ACK_LOG_RE = /ack=(\S+) in ([\d.]+)ms/;
+
+let cachedPythonBin = null;
+
+function resolvePythonBin() {
+  if (cachedPythonBin) return cachedPythonBin;
+  const candidates = process.env.DTU_EMULATOR_PYTHON
+    ? [process.env.DTU_EMULATOR_PYTHON]
+    : ['python3', 'python', 'py'];
+  for (const bin of candidates) {
+    const probe = spawnSync(bin, ['--version'], { stdio: 'ignore' });
+    if (!probe.error && probe.status === 0) {
+      cachedPythonBin = bin;
+      return bin;
+    }
+  }
+  throw new Error(
+    `no working Python interpreter found (tried: ${candidates.join(', ')}). Set DTU_EMULATOR_PYTHON.`
+  );
+}
 
 class DtuTcpEngine {
   constructor(script, ee, helpers) {
@@ -65,7 +100,7 @@ class DtuTcpEngine {
 
     if (rs.send) {
       return function send(context, callback) {
-        sendGnssFrame(target, rs.send, context, helpers, ee, callback);
+        sendViaEmulator(target, rs.send, context, helpers, ee, callback);
       };
     }
 
@@ -88,7 +123,18 @@ function resolveField(spec, key, context, helpers, fallback) {
   return interpolate(raw, context, helpers);
 }
 
-function sendGnssFrame(target, spec, context, helpers, ee, callback) {
+// Contract example shipped with dtu-emulator for each sensor type — used as
+// the fixture-mode source of truth for frame shape (dtu-emulator randomizes
+// the payload itself; see run_fixture in modes/fixture_mode.py).
+const SENSOR_CONTRACT_FILES = {
+  gnss: 'gnss-shangtan.json',
+  rainfall: 'rainfall-shangtan.json',
+  strain: 'strain-shangtan.json',
+  soil_pressure: 'soil-pressure-shangtan.json',
+  deep_displacement: 'deep-displacement-lingzhan.json',
+};
+
+function sendViaEmulator(target, spec, context, helpers, ee, callback) {
   // Tolerar TARGET_HOST=http://host:port o https://host:port por costumbre
   // (el resto del repo usaba ese formato antes de la migración a TCP) —
   // la ingesta real es TCP puro, sin esquema, pero fallar duro acá solo
@@ -102,78 +148,73 @@ function sendGnssFrame(target, spec, context, helpers, ee, callback) {
     return callback(err, context);
   }
 
-  let frame;
+  const sensorType = resolveField(spec, 'sensorType', context, helpers, DEFAULT_SENSOR_TYPE);
+  const contractFileName = resolveField(spec, 'contractFile', context, helpers, () => SENSOR_CONTRACT_FILES[sensorType]);
+  if (!contractFileName) {
+    ee.emit('error', 'unknown_sensor_type');
+    return callback(new Error(`no contract example for sensorType "${sensorType}" — set spec.contractFile explicitly`), context);
+  }
+  const contractFile = path.join(DTU_EMULATOR_PATH, 'contracts', 'examples', contractFileName);
+
+  const args = [
+    '-m', 'sender', 'fixture',
+    '--file', contractFile,
+    '--count', '1',
+    '--rate', '0',
+    '--host', host,
+    '--port', String(port),
+    '--ack-timeout', String(ACK_TIMEOUT_MS / 1000),
+    '--no-retry', // fail-fast: backoff/reconnect would corrupt arrival-rate pacing under load
+    '--log-level', 'INFO',
+  ];
+  const seed = resolveField(spec, 'seed', context, helpers, undefined);
+  if (seed !== undefined) args.push('--seed', String(seed));
+  const corrupt = resolveField(spec, 'corrupt', context, helpers, undefined);
+  if (corrupt !== undefined) args.push('--corrupt', String(corrupt));
+
+  let pythonBin;
   try {
-    frame = buildGnssFrame({
-      msgId: null, // random 16 bytes; wire format does not assert UUID-v4 shape
-      projectId: resolveField(spec, 'projectId', context, helpers, 'thesis_load_test'),
-      sensorId: resolveField(spec, 'sensorId', context, helpers, () => `GNSS-${1 + Math.floor(Math.random() * 20)}`),
-      timestampMs: Date.now(),
-      samplingIntervalSeconds: Number(resolveField(spec, 'samplingIntervalSeconds', context, helpers, 3600)),
-      displacementXMm: Number(resolveField(spec, 'displacementXMm', context, helpers, () => randomInRange(-5, 5))),
-      displacementYMm: Number(resolveField(spec, 'displacementYMm', context, helpers, () => randomInRange(-5, 5))),
-      displacementZMm: Number(resolveField(spec, 'displacementZMm', context, helpers, () => randomInRange(-2, 2))),
-      displacementHorizontalMm: Number(resolveField(spec, 'displacementHorizontalMm', context, helpers, () => Math.abs(randomInRange(0, 15)))),
-      cumulativeDisplacementMm: Number(resolveField(spec, 'cumulativeDisplacementMm', context, helpers, () => Math.abs(randomInRange(0, 2000)))),
-      fixQuality: resolveField(spec, 'fixQuality', context, helpers, 'rtk_fixed'),
-    });
-  } catch (buildErr) {
-    ee.emit('error', 'frame_build_failed');
-    return callback(buildErr, context);
+    pythonBin = resolvePythonBin();
+  } catch (resolveErr) {
+    ee.emit('error', 'python_not_found');
+    return callback(resolveErr, context);
   }
 
-  const socket = new net.Socket();
-  let settled = false;
   const startedAt = Date.now();
+  execFile(
+    pythonBin,
+    args,
+    {
+      cwd: DTU_EMULATOR_PATH,
+      env: { ...process.env, PYTHONPATH: DTU_EMULATOR_SRC },
+      timeout: ACK_TIMEOUT_MS + 5000,
+      killSignal: 'SIGKILL',
+    },
+    (err, stdout, stderr) => {
+      const wallClockMs = Date.now() - startedAt;
+      const match = ACK_LOG_RE.exec(stderr) || ACK_LOG_RE.exec(stdout);
 
-  const finish = (err) => {
-    if (settled) return;
-    settled = true;
-    socket.destroy();
-    if (err) return callback(err, context);
-    ee.emit('counter', 'dtu_tcp.frames_acked', 1);
-    ee.emit('histogram', 'dtu_tcp.round_trip_ms', Date.now() - startedAt);
-    return callback(null, context);
-  };
+      if (!match) {
+        ee.emit('error', err ? (err.killed ? 'emulator_timeout' : 'emulator_no_ack_line') : 'emulator_no_ack_line');
+        return callback(
+          new Error(`dtu-emulator produced no parseable ACK line (exit=${err ? err.code : 0}): ${stderr.slice(-500)}`),
+          context
+        );
+      }
 
-  socket.setTimeout(CONNECT_TIMEOUT_MS);
-  socket.once('timeout', () => {
-    ee.emit('error', 'connect_or_ack_timeout');
-    finish(new Error(`timeout connecting/waiting for ack from ${host}:${port}`));
-  });
-  socket.once('error', (err) => {
-    ee.emit('error', err.code || 'socket_error');
-    finish(err);
-  });
+      const [, status, latencyStr] = match;
+      const latencyMs = Number(latencyStr);
 
-  socket.connect(port, host, () => {
-    socket.setTimeout(ACK_TIMEOUT_MS);
-    socket.write(frame);
-  });
+      if (status !== 'OK') {
+        ee.emit('error', `frame_rejected_${status}`);
+        return callback(new Error(`frame rejected by ${host}:${port}: ack=${status}`), context);
+      }
 
-  socket.once('data', (data) => {
-    const ack = parseAck(data);
-    if (ack.malformed) {
-      ee.emit('error', 'malformed_ack');
-      return finish(new Error(`malformed ack from ${host}:${port}: ${data.toString('hex')}`));
+      ee.emit('counter', 'dtu_tcp.frames_acked', 1);
+      ee.emit('histogram', 'dtu_tcp.round_trip_ms', Number.isFinite(latencyMs) ? latencyMs : wallClockMs);
+      return callback(null, context);
     }
-    if (!ack.ok) {
-      ee.emit('error', `frame_rejected_status_${ack.status}_code_${ack.code}`);
-      return finish(new Error(`frame rejected: status=0x${ack.status.toString(16)} code=${ack.code}`));
-    }
-    return finish(null);
-  });
-
-  socket.once('close', () => {
-    if (!settled) {
-      ee.emit('error', 'connection_closed_no_ack');
-      finish(new Error(`connection closed by ${host}:${port} before ack (malformed frame or sink failure)`));
-    }
-  });
-}
-
-function randomInRange(min, max) {
-  return min + Math.random() * (max - min);
+  );
 }
 
 module.exports = DtuTcpEngine;
