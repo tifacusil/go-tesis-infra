@@ -378,6 +378,32 @@ no legible), imprime un aviso y la corrida sigue igual — no aborta el
 experimento por un fallo de limpieza, pero el aviso debe revisarse antes
 de confiar en los números de esa corrida.
 
+**La máquina que corre Artillery no corre en el mismo servidor/cluster que
+el sistema bajo prueba** — Redis y MySQL en k8s son `ClusterIP` (sin
+exposición externa a propósito, por seguridad). El script abre un
+`kubectl port-forward` temporal solo durante el reset y se conecta por
+`localhost` — requiere `kubectl` configurado contra el cluster desde la
+máquina cliente (mismo prerequisito que ya hace falta para cualquier
+`kubectl get pods`). No requiere tener `redis-cli`/`mysql` client
+instalados: si no están en PATH, se usa un contenedor Docker efímero
+automáticamente.
+
+Si la máquina cliente **no** tiene `kubectl` contra el cluster (ej. corre
+completamente aislada, con acceso a Redis/MySQL solo por otra vía — VPN,
+un túnel ya armado a mano), setear conexión directa:
+
+```bash
+export REDIS_HOST=<host-o-ip>
+export REDIS_PASSWORD=<password>
+export MYSQL_EW_HOST=<host-o-ip>
+export MYSQL_EW_PASSWORD=<password>
+```
+
+Con `REDIS_HOST`/`MYSQL_EW_HOST` seteados, el script se salta la detección
+automática de k8s/Docker y conecta directo a esos hosts (ver comentario de
+cabecera en `reset-state.sh` para el resto de variables — puertos,
+usuario, base de datos, todas opcionales con default).
+
 Los scripts de `chaos/` (incluido `run-during-endurance.sh`) **no** llaman
 a `reset-state.sh` — las alertas generadas durante una ventana de chaos
 (ej. `netem-delay-ew-da.sh`) son justamente lo que se está midiendo
