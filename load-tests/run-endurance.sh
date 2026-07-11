@@ -52,6 +52,8 @@ echo "    Corrida inicia [$(date '+%Y-%m-%d %H:%M:%S')], termina ~$(date -d '+12
 echo "    Monitorear en paralelo: Grafana (throughput/latencia/CPU/mem), colas RabbitMQ, backlog Redis."
 echo ""
 
+"$SCRIPT_DIR/reset-state.sh" || echo "AVISO: reset-state falló, la corrida de 12h puede arrancar con estado residual (Redis backlog / alerts) de una corrida anterior." >&2
+
 region_id=$(grafana_annotate_region_start "Fase 2 · Sistema $SYSTEM · sostenida ${SUSTAINED_RATE}req/s (12h)" "fase-2" "sistema-$SYSTEM" "sustained-rate-$SUSTAINED_RATE")
 # Si la corrida de 12h muere a mitad de camino, igual queremos cerrar la
 # anotación de Grafana con la hora real de corte, no dejarla abierta para

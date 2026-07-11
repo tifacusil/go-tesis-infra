@@ -51,6 +51,8 @@ for NAME in "${BURST_SCENARIOS[@]}"; do
 
   echo "--- [$(date '+%H:%M:%S')] Corrida ${NAME} ---"
 
+  "$SCRIPT_DIR/reset-state.sh" || echo "AVISO: reset-state falló, la corrida $NAME puede arrancar con estado residual de la anterior." >&2
+
   region_id=$(grafana_annotate_region_start "Burst · Sistema $SYSTEM · $NAME" "burst" "sistema-$SYSTEM" "$NAME")
   trap 'grafana_annotate_region_end "$region_id"' EXIT
 

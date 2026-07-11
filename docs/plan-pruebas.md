@@ -342,6 +342,33 @@ engine TCP local (`load-tests/artillery-engine-dtu-tcp/`) — no requiere
 instalación aparte. Ver `load-tests/README-engine.md` si se corre
 `artillery run` directo sin pasar por estos scripts.
 
+### 5.1 Limpieza de estado entre corridas
+
+`load-tests/reset-state.sh` corre automáticamente antes de cada nivel/
+escenario en `run-all.sh`, `run-all-burst.sh` y `run-endurance.sh` (no
+hace falta invocarlo a mano). Limpia:
+
+- **Redis** (`FLUSHDB`) — buffer de dedup `sensor_buffer:*` de data-receiving.
+- **MySQL early-warning** (`TRUNCATE alerts`) — cada frame que cruza umbral
+  durante una corrida real genera una fila permanente; sin limpiar, el
+  volumen de alertas acumulado entre corridas ensucia throughput/latencia
+  medidos y sesga la comparación A vs B si el volumen difiere entre ambos.
+
+**No** limpia `mysql-data-management` — las lecturas persistidas ahí son el
+dato que se está midiendo, no un efecto secundario a descartar.
+
+Detecta automáticamente el entorno (Kubernetes namespace `landslide` vs.
+Docker Compose local). Si falla (pod/contenedor no encontrado, credencial
+no legible), imprime un aviso y la corrida sigue igual — no aborta el
+experimento por un fallo de limpieza, pero el aviso debe revisarse antes
+de confiar en los números de esa corrida.
+
+Los scripts de `chaos/` (incluido `run-during-endurance.sh`) **no** llaman
+a `reset-state.sh` — las alertas generadas durante una ventana de chaos
+(ej. `netem-delay-ew-da.sh`) son justamente lo que se está midiendo
+(`ew_alerts_published_total` debe seguir creciendo, CLAUDE.md §2.3), no
+ruido a limpiar.
+
 ```bash
 cd tesis-infra
 

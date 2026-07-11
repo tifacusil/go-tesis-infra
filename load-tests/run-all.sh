@@ -52,6 +52,8 @@ for VU in "${VU_LEVELS[@]}"; do
   echo "--- [$(date '+%H:%M:%S')] Corrida VU=${VU} ---"
   echo "    Warmup: 3 min | Medición: 7 min"
 
+  "$SCRIPT_DIR/reset-state.sh" || echo "AVISO: reset-state falló, la corrida VU=$VU puede arrancar con estado residual de la anterior." >&2
+
   region_id=$(grafana_annotate_region_start "Fase 1 · Sistema $SYSTEM · VU=$VU" "fase-1" "sistema-$SYSTEM" "vu-$VU")
   trap 'grafana_annotate_region_end "$region_id"' EXIT
 
