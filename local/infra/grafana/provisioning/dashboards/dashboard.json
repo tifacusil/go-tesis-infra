@@ -1286,7 +1286,7 @@
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "sum by (grpc_code) (rate(grpc_server_handled_total{grpc_code=\"OK\"}[1m]))",
+          "expr": "sum(rate(grpc_server_handled_total{grpc_code=\"OK\"}[5m]))",
           "legendFormat": "exito (OK)",
           "range": true,
           "refId": "A"
@@ -1297,7 +1297,7 @@
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "sum by (grpc_code) (rate(grpc_server_handled_total{grpc_code!=\"OK\"}[1m]))",
+          "expr": "sum by (grpc_code) (rate(grpc_server_handled_total{grpc_code!=\"OK\"}[5m]) > 0)",
           "legendFormat": "error {{grpc_code}}",
           "range": true,
           "refId": "B"
