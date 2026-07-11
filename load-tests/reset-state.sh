@@ -182,15 +182,16 @@ _reset_ssh_native() {
   echo "--- Entorno: SSH a $SSH_USER@$SSH_HOST (procesos nativos, sin k8s) ---"
 
   local redis_result
+  local redis_port="${REDIS_PORT:-6379}"
   if [[ -n "${REDIS_PASSWORD:-}" ]]; then
-    redis_result=$(_ssh_run "redis-cli -a '$REDIS_PASSWORD' --no-auth-warning FLUSHDB >/dev/null && echo OK") || redis_result="SSH_ERROR"
+    redis_result=$(_ssh_run "redis-cli -p '$redis_port' -a '$REDIS_PASSWORD' --no-auth-warning FLUSHDB >/dev/null && echo OK") || redis_result="SSH_ERROR"
   else
-    redis_result=$(_ssh_run "redis-cli FLUSHDB >/dev/null && echo OK") || redis_result="SSH_ERROR"
+    redis_result=$(_ssh_run "redis-cli -p '$redis_port' FLUSHDB >/dev/null && echo OK") || redis_result="SSH_ERROR"
   fi
   redis_result=$(echo "$redis_result" | grep -v '^\s*$' | tail -n1)
   case "$redis_result" in
     SSH_ERROR) echo "ERROR: falló el comando SSH remoto para Redis — se omite flush." >&2 ;;
-    OK) echo "Redis: FLUSHDB OK (vía SSH nativo a $SSH_HOST)" ;;
+    OK) echo "Redis: FLUSHDB OK (vía SSH nativo a $SSH_HOST:$redis_port)" ;;
     *) echo "AVISO: respuesta inesperada del reset de Redis vía SSH: $redis_result" >&2 ;;
   esac
 
@@ -199,12 +200,13 @@ _reset_ssh_native() {
     return 1
   fi
   local mysql_db="${MYSQL_EW_DATABASE:-early_warning}"
+  local mysql_port="${MYSQL_EW_PORT:-3306}"
   local mysql_result
-  mysql_result=$(_ssh_run "mysql -uroot -p'$MYSQL_EW_PASSWORD' '$mysql_db' -e 'TRUNCATE TABLE alerts;' >/dev/null 2>&1 && echo OK") || mysql_result="SSH_ERROR"
+  mysql_result=$(_ssh_run "mysql -uroot -p'$MYSQL_EW_PASSWORD' -P '$mysql_port' -h 127.0.0.1 '$mysql_db' -e 'TRUNCATE TABLE alerts;' >/dev/null 2>&1 && echo OK") || mysql_result="SSH_ERROR"
   mysql_result=$(echo "$mysql_result" | grep -v '^\s*$' | tail -n1)
   case "$mysql_result" in
     SSH_ERROR) echo "ERROR: falló el comando SSH remoto para MySQL — se omite truncate." >&2; return 1 ;;
-    OK) echo "MySQL early_warning.alerts: TRUNCATE OK (vía SSH nativo a $SSH_HOST)" ;;
+    OK) echo "MySQL early_warning.alerts: TRUNCATE OK (vía SSH nativo a $SSH_HOST:$mysql_port)" ;;
     *) echo "AVISO: respuesta inesperada del reset de MySQL vía SSH: $mysql_result" >&2 ;;
   esac
 }
