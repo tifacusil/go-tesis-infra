@@ -11,43 +11,96 @@
 # NO limpia mysql-data-management (las lecturas persistidas SON el dato que
 # se está midiendo, no un efecto secundario a descartar).
 #
-# La máquina que corre Artillery NO corre en el mismo servidor/cluster que
-# el sistema bajo prueba — Redis y MySQL en k8s son ClusterIP (sin
-# exposición externa, correcto por seguridad: no queremos un Redis/MySQL
-# de infra alcanzable desde fuera del cluster todo el tiempo). Por eso este
-# script abre un `kubectl port-forward` temporal solo durante el reset, se
-# conecta por localhost con redis-cli/mysql client, y lo cierra al
-# terminar — no requiere exponer nada de forma permanente.
+# La máquina que corre Artillery casi nunca corre en el mismo servidor/
+# cluster que el sistema bajo prueba — Redis y MySQL en k8s son ClusterIP
+# (sin exposición externa, correcto por seguridad: no queremos un Redis/
+# MySQL de infra alcanzable desde fuera del cluster todo el tiempo). Este
+# script soporta 4 formas de llegar a ellos, en este orden de prioridad:
+#
+#   1. SSH al servidor (SSH_HOST seteado) — el caso más común: la máquina
+#      que corre Artillery es una laptop sin kubectl configurado, pero
+#      el operador SÍ tiene acceso SSH al servidor donde el cluster corre
+#      (o desde donde kubectl sí alcanza al cluster). Todo el trabajo
+#      (kubectl exec para leer credenciales, kubectl exec para correr
+#      redis-cli/mysql DENTRO de un pod) se ejecuta remoto vía un solo
+#      comando ssh — no hace falta port-forward ni kubectl local.
+#   2. kubectl local (si responde) — la máquina que corre esto SÍ tiene
+#      kubectl configurado contra el cluster: port-forward temporal +
+#      redis-cli/mysql client locales.
+#   3. Docker Compose (local) — kubectl no disponible pero sí docker: los
+#      contenedores están en la misma red que el operador, exec directo.
+#   4. Conexión directa por red (REDIS_HOST/MYSQL_EW_HOST) — para cuando
+#      ninguno de los anteriores aplica pero hay otra vía de red (VPN, un
+#      túnel ya armado a mano).
 #
 # redis-cli/mysql client no tienen que estar instalados en la máquina: si no
 # están en PATH, se usa un contenedor Docker efímero (mismo patrón que
-# chaos/*.sh con pumba) — ver _redis_cli/_mysql_cli más abajo.
-#
-# Entorno detectado automáticamente:
-#   - Kubernetes (namespace $K8S_NAMESPACE) si kubectl responde: port-forward
-#     + redis-cli/mysql client locales.
-#   - Docker Compose (local) si no hay kubectl pero sí docker: kubectl exec
-#     directo, sin port-forward (el contenedor SÍ está en la misma red que
-#     el operador cuando se corre localmente).
+# chaos/*.sh con pumba) — ver _redis_cli/_mysql_cli más abajo. Mismo criterio
+# para sshpass (necesario para pasar SSH_PASSWORD sin prompt interactivo).
 #
 # Uso:
 #   ./load-tests/reset-state.sh
 #
-# Variables (todas opcionales; con kubectl las credenciales se leen del pod
-# real, no hace falta pasarlas a mano):
-#   K8S_NAMESPACE       default: landslide
-#   REDIS_HOST          override si NO se usa kubectl (conexión directa)
+# Variables:
+#   SSH_HOST            host/IP del servidor con acceso a kubectl (activa modo SSH)
+#   SSH_USER             usuario SSH (obligatorio si SSH_HOST está seteado)
+#   SSH_PASSWORD          password SSH (o SSH_KEY_PATH para auth por key)
+#   SSH_KEY_PATH          ruta a llave privada SSH, alternativa a SSH_PASSWORD
+#   SSH_PORT              default: 22
+#   K8S_NAMESPACE       default: landslide (aplica a modo SSH y modo kubectl local)
+#   REDIS_HOST          conexión directa, sin SSH/kubectl/docker
 #   REDIS_PORT          default: 6379
-#   REDIS_PASSWORD      override si NO se usa kubectl
-#   MYSQL_EW_HOST       override si NO se usa kubectl
+#   REDIS_PASSWORD      conexión directa
+#   MYSQL_EW_HOST       conexión directa, sin SSH/kubectl/docker
 #   MYSQL_EW_PORT       default: 3306
 #   MYSQL_EW_USER       default: root
-#   MYSQL_EW_PASSWORD   override si NO se usa kubectl
+#   MYSQL_EW_PASSWORD   conexión directa
 #   MYSQL_EW_DATABASE   default: early_warning
+#
+# IMPORTANTE — nunca commitear SSH_PASSWORD/MYSQL_EW_PASSWORD/etc. Van en
+# load-tests/.env (gitignored), nunca en un script o archivo trackeado.
 set -euo pipefail
 
 K8S_NAMESPACE="${K8S_NAMESPACE:-landslide}"
+SSH_PORT="${SSH_PORT:-22}"
 _pf_pids=()
+
+# _ssh_run <comando remoto> — ejecuta un comando en $SSH_HOST vía $SSH_USER,
+# autenticando por SSH_KEY_PATH (preferido) o SSH_PASSWORD (vía sshpass).
+# Usa el ssh/sshpass nativos si están en PATH; si no, cae a un contenedor
+# Docker efímero con ambos instalados (alpine trae openssh-client, sshpass
+# se agrega vía apk en el mismo `docker run` — sin necesitar una imagen
+# custom publicada).
+_ssh_run() {
+  local remote_cmd="$1"
+  local ssh_opts=(-p "$SSH_PORT" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
+
+  if command -v ssh >/dev/null 2>&1; then
+    if [[ -n "${SSH_KEY_PATH:-}" ]]; then
+      ssh "${ssh_opts[@]}" -i "$SSH_KEY_PATH" "${SSH_USER}@${SSH_HOST}" -- "$remote_cmd"
+    elif command -v sshpass >/dev/null 2>&1; then
+      sshpass -p "$SSH_PASSWORD" ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" -- "$remote_cmd"
+    else
+      echo "ERROR: SSH_PASSWORD seteado pero 'sshpass' no está instalado (necesario para auth SSH no interactiva)." >&2
+      echo "  No existe en Chocolatey. Opciones:" >&2
+      echo "    - Windows con scoop:  scoop install sshpass" >&2
+      echo "    - Usar SSH_KEY_PATH en vez de SSH_PASSWORD (más seguro, sin instalar nada extra)" >&2
+      echo "    - Instalar/levantar Docker Desktop (fallback automático, sin instalar sshpass en la máquina)" >&2
+      return 127
+    fi
+  elif command -v docker >/dev/null 2>&1; then
+    if [[ -n "${SSH_KEY_PATH:-}" ]]; then
+      docker run --rm -v "$(cygpath -u "$SSH_KEY_PATH" 2>/dev/null || echo "$SSH_KEY_PATH")":/key:ro \
+        alpine:3 sh -c "apk add --no-cache openssh-client >/dev/null && ssh $(printf '%q' "${ssh_opts[@]}") -i /key ${SSH_USER}@${SSH_HOST} -- $(printf '%q' "$remote_cmd")"
+    else
+      docker run --rm alpine:3 sh -c \
+        "apk add --no-cache openssh-client sshpass >/dev/null && sshpass -p $(printf '%q' "$SSH_PASSWORD") ssh $(printf '%q' "${ssh_opts[@]}") ${SSH_USER}@${SSH_HOST} -- $(printf '%q' "$remote_cmd")"
+    fi
+  else
+    echo "ERROR: ni ssh ni docker disponibles — no se puede conectar a SSH_HOST=$SSH_HOST." >&2
+    return 127
+  fi
+}
 
 # _redis_cli / _mysql_cli — usan el binario nativo si está en PATH, si no
 # caen a un contenedor Docker efímero (mismo patrón que chaos/*.sh con
@@ -114,6 +167,61 @@ _cleanup_port_forwards() {
 trap _cleanup_port_forwards EXIT
 
 echo "=== reset-state: limpiando Redis + tabla alerts antes de la corrida ==="
+
+# _reset_ssh — todo el trabajo corre DENTRO del servidor (kubectl exec
+# directo, sin port-forward: ahí kubectl ya está configurado y en la misma
+# red que los pods). Un solo comando SSH por servicio; las credenciales se
+# leen y se usan en la misma sesión remota, nunca cruzan la red en claro
+# hacia la máquina cliente más que dentro del túnel SSH ya cifrado.
+_reset_ssh() {
+  echo "--- Entorno: SSH a $SSH_USER@$SSH_HOST (namespace $K8S_NAMESPACE en el servidor) ---"
+
+  if ! _ssh_run "command -v kubectl >/dev/null 2>&1"; then
+    echo "ERROR: kubectl no está disponible en $SSH_HOST (o la conexión SSH falló) — no se pudo limpiar estado." >&2
+    return 1
+  fi
+
+  local redis_result
+  redis_result=$(_ssh_run "
+    set -eu
+    pod=\$(kubectl get pod -n '$K8S_NAMESPACE' -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+    if [ -z \"\$pod\" ]; then echo 'NOPOD'; exit 0; fi
+    pass=\$(kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv REDIS_PASSWORD 2>/dev/null || true)
+    if [ -n \"\$pass\" ]; then
+      kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- redis-cli -a \"\$pass\" --no-auth-warning FLUSHDB
+    else
+      kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- redis-cli FLUSHDB
+    fi
+    echo \"OK:\$pod\"
+  ") || redis_result="SSH_ERROR"
+
+  case "$redis_result" in
+    NOPOD) echo "AVISO: no se encontró pod de Redis (label app=redis) en $K8S_NAMESPACE — se omite flush." >&2 ;;
+    SSH_ERROR) echo "ERROR: falló el comando SSH remoto para Redis — se omite flush." >&2 ;;
+    OK:*) echo "Redis: FLUSHDB OK (${redis_result#OK:}, vía SSH a $SSH_HOST)" ;;
+    *) echo "AVISO: respuesta inesperada del reset de Redis vía SSH: $redis_result" >&2 ;;
+  esac
+
+  local mysql_result
+  mysql_result=$(_ssh_run "
+    set -eu
+    pod=\$(kubectl get pod -n '$K8S_NAMESPACE' -l app=mysql-early-warning -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+    if [ -z \"\$pod\" ]; then echo 'NOPOD'; exit 0; fi
+    rootpass=\$(kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv MYSQL_ROOT_PASSWORD 2>/dev/null || true)
+    if [ -z \"\$rootpass\" ]; then echo 'NOPASS'; exit 0; fi
+    db=\$(kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv MYSQL_DATABASE 2>/dev/null || echo early_warning)
+    kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- mysql -uroot -p\"\$rootpass\" \"\$db\" -e 'TRUNCATE TABLE alerts;'
+    echo \"OK:\$pod\"
+  ") || mysql_result="SSH_ERROR"
+
+  case "$mysql_result" in
+    NOPOD) echo "AVISO: no se encontró pod de mysql-early-warning en $K8S_NAMESPACE — se omite truncate." >&2 ;;
+    NOPASS) echo "ERROR: no se pudo leer MYSQL_ROOT_PASSWORD del pod remoto — no se puede truncar alerts de forma segura." >&2; return 1 ;;
+    SSH_ERROR) echo "ERROR: falló el comando SSH remoto para MySQL — se omite truncate." >&2; return 1 ;;
+    OK:*) echo "MySQL early_warning.alerts: TRUNCATE OK (${mysql_result#OK:}, vía SSH a $SSH_HOST)" ;;
+    *) echo "AVISO: respuesta inesperada del reset de MySQL vía SSH: $mysql_result" >&2 ;;
+  esac
+}
 
 # _wait_port_forward <local_port> <timeout_seconds> — espera a que el
 # port-forward realmente acepte conexiones antes de usarlo (kubectl
@@ -245,14 +353,21 @@ _reset_direct() {
   fi
 }
 
-if [[ -n "${REDIS_HOST:-}${MYSQL_EW_HOST:-}" ]]; then
+if [[ -n "${SSH_HOST:-}" ]]; then
+  : "${SSH_USER:?SSH_HOST seteado pero falta SSH_USER}"
+  if [[ -z "${SSH_PASSWORD:-}${SSH_KEY_PATH:-}" ]]; then
+    echo "ERROR: SSH_HOST seteado pero falta SSH_PASSWORD o SSH_KEY_PATH." >&2
+    exit 1
+  fi
+  _reset_ssh
+elif [[ -n "${REDIS_HOST:-}${MYSQL_EW_HOST:-}" ]]; then
   _reset_direct
 elif command -v kubectl >/dev/null 2>&1 && kubectl get ns "$K8S_NAMESPACE" >/dev/null 2>&1; then
   _reset_k8s
 elif command -v docker >/dev/null 2>&1; then
   _reset_docker
 else
-  echo "ERROR: ni kubectl (namespace $K8S_NAMESPACE) ni docker disponibles, y no se setearon REDIS_HOST/MYSQL_EW_HOST — no se pudo limpiar estado." >&2
+  echo "ERROR: ni SSH_HOST, ni kubectl (namespace $K8S_NAMESPACE), ni docker disponibles, y no se setearon REDIS_HOST/MYSQL_EW_HOST — no se pudo limpiar estado." >&2
   exit 1
 fi
 

@@ -378,19 +378,38 @@ no legible), imprime un aviso y la corrida sigue igual — no aborta el
 experimento por un fallo de limpieza, pero el aviso debe revisarse antes
 de confiar en los números de esa corrida.
 
-**La máquina que corre Artillery no corre en el mismo servidor/cluster que
-el sistema bajo prueba** — Redis y MySQL en k8s son `ClusterIP` (sin
-exposición externa a propósito, por seguridad). El script abre un
-`kubectl port-forward` temporal solo durante el reset y se conecta por
-`localhost` — requiere `kubectl` configurado contra el cluster desde la
-máquina cliente (mismo prerequisito que ya hace falta para cualquier
-`kubectl get pods`). No requiere tener `redis-cli`/`mysql` client
-instalados: si no están en PATH, se usa un contenedor Docker efímero
-automáticamente.
+**La máquina que corre Artillery casi nunca corre en el mismo servidor/
+cluster que el sistema bajo prueba** — Redis y MySQL en k8s son
+`ClusterIP` (sin exposición externa a propósito, por seguridad). El caso
+real más común (laptop del operador, sin `kubectl` configurado contra el
+cluster, pero con acceso SSH al servidor donde el cluster sí corre):
 
-Si la máquina cliente **no** tiene `kubectl` contra el cluster (ej. corre
-completamente aislada, con acceso a Redis/MySQL solo por otra vía — VPN,
-un túnel ya armado a mano), setear conexión directa:
+```bash
+# En load-tests/.env (nunca a mano en cada sesión, nunca commiteado):
+SSH_HOST=<ip-del-servidor>
+SSH_USER=<usuario-ssh>
+SSH_PASSWORD=<password>        # o SSH_KEY_PATH=<ruta-a-llave-privada>
+K8S_NAMESPACE=landslide        # default, casi nunca hace falta cambiarlo
+```
+
+Con `SSH_HOST` seteado, `reset-state.sh` ejecuta todo el trabajo (leer
+credenciales, correr `redis-cli`/`mysql` dentro de los pods) **del lado
+del servidor** vía un solo comando SSH por servicio — no requiere
+`kubectl` ni credenciales del cluster en la máquina que corre Artillery,
+solo el acceso SSH que ya se usa para cosas como `kubectl get pods -A`
+manual. Requiere `sshpass` instalado si se usa `SSH_PASSWORD` (no está en
+Chocolatey — instalar con `scoop install sshpass` en Windows, o usar
+`SSH_KEY_PATH` en vez de password, más seguro y sin instalar nada extra).
+Si tampoco hay `sshpass` ni `ssh` nativo, cae a un contenedor Docker
+efímero con ambos.
+
+Si la máquina cliente **sí** tiene `kubectl` configurado directo contra el
+cluster (menos común, pero posible), el script lo detecta solo y usa
+`kubectl port-forward` en vez de SSH — no hace falta configurar nada para
+este caso, es automático si `SSH_HOST` no está seteado.
+
+Si ninguno de los anteriores aplica pero hay otra vía de red (VPN, un
+túnel ya armado a mano) directa a Redis/MySQL:
 
 ```bash
 export REDIS_HOST=<host-o-ip>
@@ -399,10 +418,10 @@ export MYSQL_EW_HOST=<host-o-ip>
 export MYSQL_EW_PASSWORD=<password>
 ```
 
-Con `REDIS_HOST`/`MYSQL_EW_HOST` seteados, el script se salta la detección
-automática de k8s/Docker y conecta directo a esos hosts (ver comentario de
-cabecera en `reset-state.sh` para el resto de variables — puertos,
-usuario, base de datos, todas opcionales con default).
+Ver comentario de cabecera en `reset-state.sh` para el resto de variables
+(puertos, usuario, base de datos — todas opcionales con default) y el
+orden de prioridad completo entre los 4 modos (SSH > kubectl local >
+Docker Compose local > conexión directa).
 
 Los scripts de `chaos/` (incluido `run-during-endurance.sh`) **no** llaman
 a `reset-state.sh` — las alertas generadas durante una ventana de chaos
