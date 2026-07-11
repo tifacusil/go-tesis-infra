@@ -28,11 +28,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/results/$SYSTEM"
 SCENARIOS_DIR="$SCRIPT_DIR/scenarios"
 source "$SCRIPT_DIR/lib/grafana-annotate.sh"
+source "$SCRIPT_DIR/lib/check-dtu-emulator.sh"
 
 export NODE_PATH="$SCRIPT_DIR"
 
 if ! command -v artillery >/dev/null 2>&1; then
   echo "ERROR: 'artillery' no está en PATH. Instalar con: npm install -g artillery" >&2
+  exit 1
+fi
+
+echo "Verificando dtu-emulator antes de arrancar..."
+if ! check_dtu_emulator "$SCRIPT_DIR"; then
   exit 1
 fi
 

@@ -83,11 +83,26 @@ observa cualquiera de:
 | Tasa de error HTTP | > 1% de requests con status ≥ 500 o timeout | reporte Artillery (`errors`) |
 | Latencia p99 | > 5s sostenido (no picos aislados) | reporte Artillery / `metrics-by-endpoint` |
 | Backlog Redis sin drenar | crecimiento sostenido entre pasadas del `RetryWorker` (no serrucho) | `data_receiving_redis_buffer_pending` |
-| Cola RabbitMQ sin drenar | `rabbitmq_queue_messages_ready{queue="sensors.raw"}` crece sostenido | Prometheus |
+| Cola RabbitMQ sin drenar | `rabbitmq_queue_messages_ready{queue=~"data_management.persist\|early_warning.evaluate"}` crece sostenido (`sensors.raw` es el exchange, no tiene profundidad propia — las colas reales son estas dos) | Prometheus |
 | Caída de instancia | cualquier réplica no pasa `readinessProbe`/health durante la corrida | logs / Consul o K8s |
 
 Si ninguna señal se dispara en el nivel 400, ese es el techo probado (no hay
 niveles más altos definidos aún — ver §6 para extender el escalón).
+
+**Cuello de botella del cliente, no del sistema bajo prueba:** el engine
+`artillery-engine-dtu-tcp` arranca un proceso Python nuevo (`dtu-emulator`)
+por cada frame enviado — medido en esta máquina, ~224ms de overhead solo de
+arranque del intérprete, antes de tocar la red (ver
+`load-tests/README-engine.md`). A partir de cierto nivel de VU, la máquina
+que corre Artillery puede saturarse por esto — no por el sistema bajo
+prueba — y entonces las señales de la tabla de arriba estarían midiendo un
+límite falso. Señal de que esto está pasando: CPU de la máquina cliente
+(no de los pods/contenedores del sistema) al 100% sostenido durante la
+corrida, o `arrivalRate` real (ver reporte Artillery, `vusers.created` vs.
+tiempo transcurrido) notablemente por debajo del configurado. Si se
+sospecha esto en los niveles 100/400, correr esos niveles desde una
+máquina más potente antes de concluir que el sistema real no aguanta esa
+tasa.
 
 ### 1.4 Salida de la fase
 

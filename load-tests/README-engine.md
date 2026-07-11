@@ -71,9 +71,12 @@ it in a different terminal or after Artillery has already started has no effect.
 ### dtu-emulator location and Python
 
 The engine looks for `dtu-emulator` as a sibling of this repo's checkout
-(`../../dtu-emulator` relative to `artillery-engine-dtu-tcp/index.js`, i.e.
-`go-tesis-infra/../dtu-emulator`). Override with `DTU_EMULATOR_PATH` if your
-checkout lives elsewhere:
+(`../../../dtu-emulator` relative to `artillery-engine-dtu-tcp/index.js`, i.e.
+one level above `tesis-infra/` — `tesis-infra/../dtu-emulator`). If your clone
+of `dtu-emulator` lives anywhere else (e.g. a different parent folder, like
+`Documents/Github/dtu-emulator` vs. `tesis-infra`'s own parent), the default
+will NOT find it and every `send` step will fail — override with
+`DTU_EMULATOR_PATH`:
 
 ```bash
 export DTU_EMULATOR_PATH=/path/to/dtu-emulator
@@ -91,6 +94,14 @@ export DTU_EMULATOR_PYTHON=py   # or python3, or a full path
 If dtu-emulator's dependencies (`jsonschema`) aren't installed anywhere on
 that interpreter's path, fixture mode still works — the schema sanity check
 is best-effort and only logs a warning on failure.
+
+`run-all.sh`, `run-all-burst.sh`, and `run-endurance.sh` all validate
+`DTU_EMULATOR_PATH` resolution + a working Python interpreter **before**
+starting Artillery (`lib/check-dtu-emulator.sh`) — a misconfigured path fails
+fast with a clear message instead of silently failing every request mid-run.
+This matters most for `run-endurance.sh`: without the upfront check, a wrong
+path would only surface after the full 12h run, with the entire dataset
+useless (every `send` step would have failed).
 
 ## Target format changed
 
