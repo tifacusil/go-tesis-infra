@@ -42,19 +42,25 @@
 #   ./load-tests/reset-state.sh
 #
 # Variables:
-#   SSH_HOST            host/IP del servidor con acceso a kubectl (activa modo SSH)
+#   SSH_HOST            host/IP del servidor (activa modo SSH)
 #   SSH_USER             usuario SSH (obligatorio si SSH_HOST está seteado)
 #   SSH_PASSWORD          password SSH (o SSH_KEY_PATH para auth por key)
 #   SSH_KEY_PATH          ruta a llave privada SSH, alternativa a SSH_PASSWORD
 #   SSH_PORT              default: 22
-#   K8S_NAMESPACE       default: landslide (aplica a modo SSH y modo kubectl local)
+#   SSH_ORCHESTRATOR      "k8s" (default) o "native". Sistema B corre en k8s
+#                         (kubectl exec dentro del server); Sistema A corre
+#                         redis/mysql como procesos nativos systemd, sin
+#                         contenedores ni k8s — con "native" el reset pega
+#                         directo a localhost:6379/3306 DENTRO del server,
+#                         sin kubectl.
+#   K8S_NAMESPACE       default: landslide (solo aplica con SSH_ORCHESTRATOR=k8s)
+#   REDIS_PASSWORD      SSH_ORCHESTRATOR=native, o conexión directa sin SSH
+#   MYSQL_EW_PASSWORD   SSH_ORCHESTRATOR=native, o conexión directa sin SSH
 #   REDIS_HOST          conexión directa, sin SSH/kubectl/docker
 #   REDIS_PORT          default: 6379
-#   REDIS_PASSWORD      conexión directa
 #   MYSQL_EW_HOST       conexión directa, sin SSH/kubectl/docker
 #   MYSQL_EW_PORT       default: 3306
 #   MYSQL_EW_USER       default: root
-#   MYSQL_EW_PASSWORD   conexión directa
 #   MYSQL_EW_DATABASE   default: early_warning
 #
 # IMPORTANTE — nunca commitear SSH_PASSWORD/MYSQL_EW_PASSWORD/etc. Van en
@@ -168,16 +174,57 @@ trap _cleanup_port_forwards EXIT
 
 echo "=== reset-state: limpiando Redis + tabla alerts antes de la corrida ==="
 
+# _reset_ssh_native — mismo transporte SSH, pero sin kubectl: redis-cli/mysql
+# corren directo dentro del servidor contra localhost (procesos nativos
+# systemd, ej. Sistema A baseline). Credenciales vienen de REDIS_PASSWORD/
+# MYSQL_EW_PASSWORD (no hay pod del que leerlas — se pasan a mano).
+_reset_ssh_native() {
+  echo "--- Entorno: SSH a $SSH_USER@$SSH_HOST (procesos nativos, sin k8s) ---"
+
+  local redis_result
+  if [[ -n "${REDIS_PASSWORD:-}" ]]; then
+    redis_result=$(_ssh_run "redis-cli -a '$REDIS_PASSWORD' --no-auth-warning FLUSHDB >/dev/null && echo OK") || redis_result="SSH_ERROR"
+  else
+    redis_result=$(_ssh_run "redis-cli FLUSHDB >/dev/null && echo OK") || redis_result="SSH_ERROR"
+  fi
+  redis_result=$(echo "$redis_result" | grep -v '^\s*$' | tail -n1)
+  case "$redis_result" in
+    SSH_ERROR) echo "ERROR: falló el comando SSH remoto para Redis — se omite flush." >&2 ;;
+    OK) echo "Redis: FLUSHDB OK (vía SSH nativo a $SSH_HOST)" ;;
+    *) echo "AVISO: respuesta inesperada del reset de Redis vía SSH: $redis_result" >&2 ;;
+  esac
+
+  if [[ -z "${MYSQL_EW_PASSWORD:-}" ]]; then
+    echo "ERROR: SSH_ORCHESTRATOR=native requiere MYSQL_EW_PASSWORD (no hay pod del que leerla) — no se puede truncar alerts." >&2
+    return 1
+  fi
+  local mysql_db="${MYSQL_EW_DATABASE:-early_warning}"
+  local mysql_result
+  mysql_result=$(_ssh_run "mysql -uroot -p'$MYSQL_EW_PASSWORD' '$mysql_db' -e 'TRUNCATE TABLE alerts;' >/dev/null 2>&1 && echo OK") || mysql_result="SSH_ERROR"
+  mysql_result=$(echo "$mysql_result" | grep -v '^\s*$' | tail -n1)
+  case "$mysql_result" in
+    SSH_ERROR) echo "ERROR: falló el comando SSH remoto para MySQL — se omite truncate." >&2; return 1 ;;
+    OK) echo "MySQL early_warning.alerts: TRUNCATE OK (vía SSH nativo a $SSH_HOST)" ;;
+    *) echo "AVISO: respuesta inesperada del reset de MySQL vía SSH: $mysql_result" >&2 ;;
+  esac
+}
+
 # _reset_ssh — todo el trabajo corre DENTRO del servidor (kubectl exec
 # directo, sin port-forward: ahí kubectl ya está configurado y en la misma
 # red que los pods). Un solo comando SSH por servicio; las credenciales se
 # leen y se usan en la misma sesión remota, nunca cruzan la red en claro
 # hacia la máquina cliente más que dentro del túnel SSH ya cifrado.
 _reset_ssh() {
+  if [[ "${SSH_ORCHESTRATOR:-k8s}" == "native" ]]; then
+    _reset_ssh_native
+    return $?
+  fi
+
   echo "--- Entorno: SSH a $SSH_USER@$SSH_HOST (namespace $K8S_NAMESPACE en el servidor) ---"
 
   if ! _ssh_run "command -v kubectl >/dev/null 2>&1"; then
     echo "ERROR: kubectl no está disponible en $SSH_HOST (o la conexión SSH falló) — no se pudo limpiar estado." >&2
+    echo "  Si este servidor NO usa k8s, setear SSH_ORCHESTRATOR=native." >&2
     return 1
   fi
 

@@ -379,25 +379,36 @@ experimento por un fallo de limpieza, pero el aviso debe revisarse antes
 de confiar en los números de esa corrida.
 
 **La máquina que corre Artillery casi nunca corre en el mismo servidor/
-cluster que el sistema bajo prueba** — Redis y MySQL en k8s son
-`ClusterIP` (sin exposición externa a propósito, por seguridad). El caso
-real más común (laptop del operador, sin `kubectl` configurado contra el
-cluster, pero con acceso SSH al servidor donde el cluster sí corre):
+cluster que el sistema bajo prueba.** Sistema A y B viven en servidores
+DISTINTOS, con orquestación DISTINTA — no fijar estas vars en `.env`
+(pisarían una a la otra), pasarlas inline en el mismo comando que
+`TARGET_HOST`/`SYSTEM`, corrida por corrida:
 
 ```bash
-# En load-tests/.env (nunca a mano en cada sesión, nunca commiteado):
-SSH_HOST=<ip-del-servidor>
-SSH_USER=<usuario-ssh>
-SSH_PASSWORD=<password>        # o SSH_KEY_PATH=<ruta-a-llave-privada>
-K8S_NAMESPACE=landslide        # default, casi nunca hace falta cambiarlo
+# Sistema B — k8s (Redis/MySQL como ClusterIP, sin exposición externa a
+# propósito): reset-state.sh corre kubectl exec DENTRO del servidor vía SSH.
+SSH_HOST=<ip-servidor-b> SSH_USER=<usuario> SSH_PASSWORD=<password> \
+  TARGET_HOST=<ip-servidor-b>:5000 SYSTEM=B ./load-tests/run-all.sh
+
+# Sistema A — baseline, procesos nativos systemd (sin k8s, sin Docker):
+# redis-cli/mysql corren directo contra localhost DENTRO del servidor.
+SSH_HOST=<ip-servidor-a> SSH_USER=<usuario> SSH_PASSWORD=<password> \
+  SSH_ORCHESTRATOR=native REDIS_PASSWORD=<password-redis> \
+  MYSQL_EW_PASSWORD=<password-mysql> \
+  TARGET_HOST=<ip-servidor-a>:5100 SYSTEM=A ./load-tests/run-all.sh
 ```
 
-Con `SSH_HOST` seteado, `reset-state.sh` ejecuta todo el trabajo (leer
-credenciales, correr `redis-cli`/`mysql` dentro de los pods) **del lado
-del servidor** vía un solo comando SSH por servicio — no requiere
-`kubectl` ni credenciales del cluster en la máquina que corre Artillery,
-solo el acceso SSH que ya se usa para cosas como `kubectl get pods -A`
-manual. Requiere `sshpass` instalado si se usa `SSH_PASSWORD` (no está en
+Con `SSH_HOST` seteado, `reset-state.sh` ejecuta todo el trabajo **del
+lado del servidor** vía un solo comando SSH por servicio — no requiere
+`kubectl` ni acceso de red directo a Redis/MySQL desde la máquina que
+corre Artillery, solo el acceso SSH que ya se usa para diagnóstico manual.
+`SSH_ORCHESTRATOR` decide cómo se llega a Redis/MySQL una vez dentro del
+servidor: `k8s` (default, `kubectl exec` — Sistema B) o `native`
+(`redis-cli`/`mysql` directo a `localhost`, sin kubectl — Sistema A). En
+modo `native` las credenciales se pasan a mano (`REDIS_PASSWORD`/
+`MYSQL_EW_PASSWORD`) porque no hay pod del que leerlas.
+
+Requiere `sshpass` instalado si se usa `SSH_PASSWORD` (no está en
 Chocolatey — instalar con `scoop install sshpass` en Windows, o usar
 `SSH_KEY_PATH` en vez de password, más seguro y sin instalar nada extra).
 Si tampoco hay `sshpass` ni `ssh` nativo, cae a un contenedor Docker
