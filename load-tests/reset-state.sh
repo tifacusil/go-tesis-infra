@@ -188,12 +188,17 @@ _reset_ssh() {
     if [ -z \"\$pod\" ]; then echo 'NOPOD'; exit 0; fi
     pass=\$(kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv REDIS_PASSWORD 2>/dev/null || true)
     if [ -n \"\$pass\" ]; then
-      kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- redis-cli -a \"\$pass\" --no-auth-warning FLUSHDB
+      kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- redis-cli -a \"\$pass\" --no-auth-warning FLUSHDB >/dev/null
     else
-      kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- redis-cli FLUSHDB
+      kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- redis-cli FLUSHDB >/dev/null
     fi
     echo \"OK:\$pod\"
   ") || redis_result="SSH_ERROR"
+  # redis-cli imprime "OK" en su propia línea al éxito de FLUSHDB — ya
+  # redirigido a /dev/null arriba, pero por si acaso queda algo más en el
+  # bloque remoto (warnings, etc.), nos quedamos solo con la última línea
+  # no vacía, que es siempre nuestro propio marcador "OK:$pod".
+  redis_result=$(echo "$redis_result" | grep -v '^\s*$' | tail -n1)
 
   case "$redis_result" in
     NOPOD) echo "AVISO: no se encontró pod de Redis (label app=redis) en $K8S_NAMESPACE — se omite flush." >&2 ;;
@@ -210,9 +215,13 @@ _reset_ssh() {
     rootpass=\$(kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv MYSQL_ROOT_PASSWORD 2>/dev/null || true)
     if [ -z \"\$rootpass\" ]; then echo 'NOPASS'; exit 0; fi
     db=\$(kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv MYSQL_DATABASE 2>/dev/null || echo early_warning)
-    kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- mysql -uroot -p\"\$rootpass\" \"\$db\" -e 'TRUNCATE TABLE alerts;'
+    kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- mysql -uroot -p\"\$rootpass\" \"\$db\" -e 'TRUNCATE TABLE alerts;' >/dev/null 2>&1
     echo \"OK:\$pod\"
   ") || mysql_result="SSH_ERROR"
+  # Mismo criterio que Redis: quedarnos solo con la última línea no vacía
+  # (el warning "Using a password on the command line..." de mysql client
+  # va a stderr normalmente, pero por robustez lo tratamos igual).
+  mysql_result=$(echo "$mysql_result" | grep -v '^\s*$' | tail -n1)
 
   case "$mysql_result" in
     NOPOD) echo "AVISO: no se encontró pod de mysql-early-warning en $K8S_NAMESPACE — se omite truncate." >&2 ;;
