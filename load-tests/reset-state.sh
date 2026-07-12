@@ -201,8 +201,9 @@ _reset_ssh_native() {
   fi
   local mysql_db="${MYSQL_EW_DATABASE:-early_warning}"
   local mysql_port="${MYSQL_EW_PORT:-3306}"
+  local mysql_user="${MYSQL_EW_USER:-root}"
   local mysql_result
-  mysql_result=$(_ssh_run "mysql -uroot -p'$MYSQL_EW_PASSWORD' -P '$mysql_port' -h 127.0.0.1 '$mysql_db' -e 'TRUNCATE TABLE alerts;' >/dev/null 2>&1 && echo OK") || mysql_result="SSH_ERROR"
+  mysql_result=$(_ssh_run "mysql -u'$mysql_user' -p'$MYSQL_EW_PASSWORD' -P '$mysql_port' -h 127.0.0.1 '$mysql_db' -e 'TRUNCATE TABLE alerts;' >/dev/null 2>&1 && echo OK") || mysql_result="SSH_ERROR"
   mysql_result=$(echo "$mysql_result" | grep -v '^\s*$' | tail -n1)
   case "$mysql_result" in
     SSH_ERROR) echo "ERROR: falló el comando SSH remoto para MySQL — se omite truncate." >&2; return 1 ;;
