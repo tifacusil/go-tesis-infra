@@ -42,7 +42,7 @@ scrape_configs:
         labels:
           service: data-management
           component: microservice
-      - targets: ['localhost:8088', 'localhost:8092']
+      - targets: ['localhost:8092']
         labels:
           service: early-warning
           component: microservice
@@ -50,7 +50,16 @@ scrape_configs:
         labels:
           service: project-management
           component: microservice
-      - targets: ['localhost:5000']
+      - targets: ['localhost:8085']
+        labels:
+          service: user-management
+          component: microservice
+      - targets: ['localhost:8090', 'localhost:8091']
         labels:
           service: data-analysis
+          component: microservice
+      # data-receiving: 3 instancias templated, cada una expone /metrics en su HEALTHPORT.
+      - targets: ['localhost:8081', 'localhost:8087', 'localhost:8089']
+        labels:
+          service: data-receiving
           component: microservice
