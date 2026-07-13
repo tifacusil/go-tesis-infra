@@ -47,6 +47,14 @@
 #   SSH_PASSWORD          password SSH (o SSH_KEY_PATH para auth por key)
 #   SSH_KEY_PATH          ruta a llave privada SSH, alternativa a SSH_PASSWORD
 #   SSH_PORT              default: 22
+#   SUDO_PASSWORD         password de sudo del usuario SSH en el servidor
+#                         remoto, si kubectl requiere privilegios elevados
+#                         para leer /etc/rancher/k3s/k3s.yaml (típico: k3s
+#                         deja ese archivo 600 root:root, y el usuario SSH
+#                         no es root). Solo aplica con SSH_ORCHESTRATOR=k8s.
+#                         Sin este valor los comandos kubectl remotos corren
+#                         sin sudo; si el usuario SSH ya puede leer el
+#                         kubeconfig, no hace falta setearlo.
 #   SSH_ORCHESTRATOR      "k8s" (default) o "native". Sistema B corre en k8s
 #                         (kubectl exec dentro del server); Sistema A corre
 #                         redis/mysql como procesos nativos systemd, sin
@@ -69,6 +77,7 @@ set -euo pipefail
 
 K8S_NAMESPACE="${K8S_NAMESPACE:-landslide}"
 SSH_PORT="${SSH_PORT:-22}"
+SUDO_PASSWORD="${SUDO_PASSWORD:-}"
 _pf_pids=()
 
 # _ssh_run <comando remoto> — ejecuta un comando en $SSH_HOST vía $SSH_USER,
@@ -234,13 +243,15 @@ _reset_ssh() {
   local redis_result
   redis_result=$(_ssh_run "
     set -eu
-    pod=\$(kubectl get pod -n '$K8S_NAMESPACE' -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+    SUDO_PW='$SUDO_PASSWORD'
+    if [ -n \"\$SUDO_PW\" ]; then k() { sudo -S kubectl \"\$@\" <<< \"\$SUDO_PW\" 2>/dev/null; }; else k() { kubectl \"\$@\"; }; fi
+    pod=\$(k get pod -n '$K8S_NAMESPACE' -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
     if [ -z \"\$pod\" ]; then echo 'NOPOD'; exit 0; fi
-    pass=\$(kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv REDIS_PASSWORD 2>/dev/null || true)
+    pass=\$(k exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv REDIS_PASSWORD 2>/dev/null || true)
     if [ -n \"\$pass\" ]; then
-      kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- redis-cli -a \"\$pass\" --no-auth-warning FLUSHDB >/dev/null
+      k exec -n '$K8S_NAMESPACE' \"\$pod\" -- redis-cli -a \"\$pass\" --no-auth-warning FLUSHDB >/dev/null
     else
-      kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- redis-cli FLUSHDB >/dev/null
+      k exec -n '$K8S_NAMESPACE' \"\$pod\" -- redis-cli FLUSHDB >/dev/null
     fi
     echo \"OK:\$pod\"
   ") || redis_result="SSH_ERROR"
@@ -260,12 +271,14 @@ _reset_ssh() {
   local mysql_result
   mysql_result=$(_ssh_run "
     set -eu
-    pod=\$(kubectl get pod -n '$K8S_NAMESPACE' -l app=mysql-early-warning -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+    SUDO_PW='$SUDO_PASSWORD'
+    if [ -n \"\$SUDO_PW\" ]; then k() { sudo -S kubectl \"\$@\" <<< \"\$SUDO_PW\" 2>/dev/null; }; else k() { kubectl \"\$@\"; }; fi
+    pod=\$(k get pod -n '$K8S_NAMESPACE' -l app=mysql-early-warning -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
     if [ -z \"\$pod\" ]; then echo 'NOPOD'; exit 0; fi
-    rootpass=\$(kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv MYSQL_ROOT_PASSWORD 2>/dev/null || true)
+    rootpass=\$(k exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv MYSQL_ROOT_PASSWORD 2>/dev/null || true)
     if [ -z \"\$rootpass\" ]; then echo 'NOPASS'; exit 0; fi
-    db=\$(kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv MYSQL_DATABASE 2>/dev/null || echo early_warning)
-    kubectl exec -n '$K8S_NAMESPACE' \"\$pod\" -- mysql -uroot -p\"\$rootpass\" \"\$db\" -e 'TRUNCATE TABLE alerts;' >/dev/null 2>&1
+    db=\$(k exec -n '$K8S_NAMESPACE' \"\$pod\" -- printenv MYSQL_DATABASE 2>/dev/null || echo early_warning)
+    k exec -n '$K8S_NAMESPACE' \"\$pod\" -- mysql -uroot -p\"\$rootpass\" \"\$db\" -e 'TRUNCATE TABLE alerts;' >/dev/null 2>&1
     echo \"OK:\$pod\"
   ") || mysql_result="SSH_ERROR"
   # Mismo criterio que Redis: quedarnos solo con la última línea no vacía
