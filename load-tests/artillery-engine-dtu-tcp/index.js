@@ -18,26 +18,34 @@
 //
 // Frame building/sending is delegated to dtu-emulator (Python sender at
 // ../../dtu-emulator relative to this repo's checkout, or DTU_EMULATOR_PATH) —
-// see README-engine.md. Each `send` step spawns one `python -m sender fixture
-// --count 1` subprocess against the contract example for the requested sensor
-// type and parses its ACK log line. This means measured round-trip latency
-// includes Python interpreter startup, not just network + server time — an
-// accepted tradeoff for reusing dtu-emulator's canonical, contract-validated
-// frame encoding instead of re-deriving it in JS.
+// see README-engine.md.
+//
+// Every scenario file in scenarios/ has exactly ONE `send` step per VU flow —
+// a VU here IS one frame, there's no sequence of sends within a VU to amortize
+// interpreter startup over. So instead of spawning a `python -m sender fixture
+// --count 1` process per `send` step (the original design — see git history),
+// a small pool of long-lived `python -m sender stream` worker processes is
+// spawned once per target (host:port) and kept alive for the whole Artillery
+// run. Each worker holds one persistent TCP connection; `send` steps from many
+// VUs are dispatched onto the pool round-robin as JSON lines over the worker's
+// stdin, and results come back as JSON lines on stdout. This keeps "one
+// persistent connection per pool slot" instead of "one process+connection per
+// frame" while still exercising roughly as many concurrent connections as the
+// scenario's peak arrival rate (see resolvePoolSize below).
 
 const path = require('path');
-const { spawnSync, execFile } = require('child_process');
+const readline = require('readline');
+const { spawn, spawnSync } = require('child_process');
 
 const ACK_TIMEOUT_MS = 5000;
 const DEFAULT_PORT = 5000; // puerto TCP de data-receiving-1 (ver docker-compose.yml de tesis-infra)
 const DEFAULT_SENSOR_TYPE = 'gnss';
+const DEFAULT_POOL_SIZE = 50; // fallback when pool size can't be inferred — see resolvePoolSize
 
 const DTU_EMULATOR_PATH = path.resolve(
   process.env.DTU_EMULATOR_PATH || path.join(__dirname, '..', '..', '..', 'dtu-emulator')
 );
 const DTU_EMULATOR_SRC = path.join(DTU_EMULATOR_PATH, 'src');
-
-const ACK_LOG_RE = /ack=(\S+) in ([\d.]+)ms/;
 
 let cachedPythonBin = null;
 
@@ -58,16 +66,152 @@ function resolvePythonBin() {
   );
 }
 
+// ---- persistent worker pool ---------------------------------------------
+
+const pools = new Map(); // "host:port" -> Pool
+const allWorkers = new Set();
+
+// Sizes the pool to the scenario's peak arrivalRate/rampTo (roughly: how many
+// concurrent connections the old per-frame-spawn model would have opened at
+// its busiest), so pipeline depth per worker stays near zero. Override with
+// DTU_ENGINE_POOL_SIZE (e.g. required for vu-sustained-12h.yml, whose rate is
+// a templated env var this can't introspect).
+function resolvePoolSize(script) {
+  const envOverride = process.env.DTU_ENGINE_POOL_SIZE;
+  if (envOverride !== undefined) {
+    const n = Number(envOverride);
+    if (Number.isFinite(n) && n > 0) return Math.ceil(n);
+  }
+  const phases = (script.config && script.config.phases) || [];
+  let peak = 0;
+  for (const phase of phases) {
+    for (const key of ['arrivalRate', 'rampTo']) {
+      const n = Number(phase[key]);
+      if (Number.isFinite(n)) peak = Math.max(peak, n);
+    }
+  }
+  return peak > 0 ? Math.ceil(peak) : DEFAULT_POOL_SIZE;
+}
+
+function spawnWorker(host, port) {
+  const pythonBin = resolvePythonBin();
+  const args = [
+    '-m', 'sender', 'stream',
+    '--host', host,
+    '--port', String(port),
+    '--ack-timeout', String(ACK_TIMEOUT_MS / 1000),
+    '--no-retry',
+    '--log-level', 'INFO',
+  ];
+  const proc = spawn(pythonBin, args, {
+    cwd: DTU_EMULATOR_PATH,
+    env: { ...process.env, PYTHONPATH: DTU_EMULATOR_SRC },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  const worker = { proc, pending: [], closing: false };
+  allWorkers.add(worker);
+
+  proc.stdin.on('error', () => {}); // surfaced via write() callback instead
+  proc.stdout.on('error', () => {});
+
+  const rl = readline.createInterface({ input: proc.stdout, crlfDelay: Infinity });
+  rl.on('line', (line) => {
+    const entry = worker.pending.shift();
+    if (!entry) return; // stray output (e.g. a log line), ignore
+    try {
+      entry.resolve(JSON.parse(line));
+    } catch (parseErr) {
+      entry.reject(new Error(`unparseable stream worker response: ${line}`));
+    }
+  });
+
+  proc.stderr.pipe(process.stderr);
+
+  function onDown(reason) {
+    allWorkers.delete(worker);
+    const err = new Error(`dtu-emulator stream worker for ${host}:${port} is down (${reason})`);
+    for (const entry of worker.pending.splice(0)) entry.reject(err);
+    if (worker.closing) return;
+    console.error(`[dtu-tcp] ${err.message} — respawning`);
+    const pool = pools.get(`${host}:${port}`);
+    if (!pool) return;
+    try {
+      pool.replace(worker, spawnWorker(host, port));
+    } catch (respawnErr) {
+      console.error(`[dtu-tcp] failed to respawn worker for ${host}:${port}: ${respawnErr.message}`);
+    }
+  }
+
+  proc.on('exit', (code, signal) => onDown(`exit code=${code} signal=${signal}`));
+  proc.on('error', (spawnErr) => onDown(`spawn error: ${spawnErr.message}`));
+
+  return worker;
+}
+
+class Pool {
+  constructor(host, port, size) {
+    this.host = host;
+    this.port = port;
+    this.workers = Array.from({ length: size }, () => spawnWorker(host, port));
+    this.nextIndex = 0;
+  }
+
+  replace(deadWorker, freshWorker) {
+    const idx = this.workers.indexOf(deadWorker);
+    if (idx !== -1) this.workers[idx] = freshWorker;
+  }
+
+  send(request) {
+    const worker = this.workers[this.nextIndex % this.workers.length];
+    this.nextIndex += 1;
+    return new Promise((resolve, reject) => {
+      const entry = { resolve, reject };
+      worker.pending.push(entry);
+      worker.proc.stdin.write(`${JSON.stringify(request)}\n`, (writeErr) => {
+        if (!writeErr) return;
+        const idx = worker.pending.indexOf(entry);
+        if (idx !== -1) worker.pending.splice(idx, 1);
+        reject(writeErr);
+      });
+    });
+  }
+}
+
+function getPool(host, port, size) {
+  const key = `${host}:${port}`;
+  let pool = pools.get(key);
+  if (!pool) {
+    pool = new Pool(host, port, size);
+    pools.set(key, pool);
+  }
+  return pool;
+}
+
+function killAllWorkers() {
+  for (const worker of allWorkers) {
+    worker.closing = true;
+    try { worker.proc.stdin.end(); } catch (_) { /* already closed */ }
+    try { worker.proc.kill(); } catch (_) { /* already dead */ }
+  }
+}
+
+process.once('exit', killAllWorkers);
+process.once('SIGINT', () => { killAllWorkers(); process.exit(130); });
+process.once('SIGTERM', () => { killAllWorkers(); process.exit(143); });
+
+// ---------------------------------------------------------------------------
+
 class DtuTcpEngine {
   constructor(script, ee, helpers) {
     this.script = script;
     this.helpers = helpers;
     this.target = script.config.target; // "host:port", e.g. "204.168.203.32:5000"
+    this.poolSize = resolvePoolSize(script);
   }
 
   createScenario(scenarioSpec, ee) {
     const tasks = (scenarioSpec.flow || []).map((rs) => this.step(rs, ee));
-    const target = this.target;
 
     return function scenario(initialContext, callback) {
       ee.emit('started');
@@ -87,6 +231,7 @@ class DtuTcpEngine {
   step(rs, ee) {
     const helpers = this.helpers;
     const target = this.target;
+    const poolSize = this.poolSize;
 
     if (rs.think) {
       return helpers.createThink(rs, this.script.config?.defaults?.think || {});
@@ -100,7 +245,7 @@ class DtuTcpEngine {
 
     if (rs.send) {
       return function send(context, callback) {
-        sendViaEmulator(target, rs.send, context, helpers, ee, callback);
+        sendViaPool(target, poolSize, rs.send, context, helpers, ee, callback);
       };
     }
 
@@ -134,7 +279,7 @@ const SENSOR_CONTRACT_FILES = {
   deep_displacement: 'deep-displacement-lingzhan.json',
 };
 
-function sendViaEmulator(target, spec, context, helpers, ee, callback) {
+function sendViaPool(target, poolSize, spec, context, helpers, ee, callback) {
   // Tolerar TARGET_HOST=http://host:port o https://host:port por costumbre
   // (el resto del repo usaba ese formato antes de la migración a TCP) —
   // la ingesta real es TCP puro, sin esquema, pero fallar duro acá solo
@@ -156,63 +301,39 @@ function sendViaEmulator(target, spec, context, helpers, ee, callback) {
   }
   const contractFile = path.join(DTU_EMULATOR_PATH, 'contracts', 'examples', contractFileName);
 
-  const args = [
-    '-m', 'sender', 'fixture',
-    '--file', contractFile,
-    '--count', '1',
-    '--rate', '0',
-    '--host', host,
-    '--port', String(port),
-    '--ack-timeout', String(ACK_TIMEOUT_MS / 1000),
-    '--no-retry', // fail-fast: backoff/reconnect would corrupt arrival-rate pacing under load
-    '--log-level', 'INFO',
-  ];
+  const request = { file: contractFile };
   const seed = resolveField(spec, 'seed', context, helpers, undefined);
-  if (seed !== undefined) args.push('--seed', String(seed));
+  if (seed !== undefined) request.seed = Number(seed);
   const corrupt = resolveField(spec, 'corrupt', context, helpers, undefined);
-  if (corrupt !== undefined) args.push('--corrupt', String(corrupt));
+  if (corrupt !== undefined) request.corrupt = String(corrupt);
 
-  let pythonBin;
+  let pool;
   try {
-    pythonBin = resolvePythonBin();
-  } catch (resolveErr) {
+    pool = getPool(host, port, poolSize);
+  } catch (poolErr) {
     ee.emit('error', 'python_not_found');
-    return callback(resolveErr, context);
+    return callback(poolErr, context);
   }
 
   const startedAt = Date.now();
-  execFile(
-    pythonBin,
-    args,
-    {
-      cwd: DTU_EMULATOR_PATH,
-      env: { ...process.env, PYTHONPATH: DTU_EMULATOR_SRC },
-      timeout: ACK_TIMEOUT_MS + 5000,
-      killSignal: 'SIGKILL',
-    },
-    (err, stdout, stderr) => {
-      const wallClockMs = Date.now() - startedAt;
-      const match = ACK_LOG_RE.exec(stderr) || ACK_LOG_RE.exec(stdout);
-
-      if (!match) {
-        ee.emit('error', err ? (err.killed ? 'emulator_timeout' : 'emulator_no_ack_line') : 'emulator_no_ack_line');
-        return callback(
-          new Error(`dtu-emulator produced no parseable ACK line (exit=${err ? err.code : 0}): ${stderr.slice(-500)}`),
-          context
-        );
+  pool.send(request).then(
+    (msg) => {
+      if (msg.error) {
+        ee.emit('error', 'emulator_error');
+        return callback(new Error(`dtu-emulator stream worker error: ${msg.error}`), context);
       }
-
-      const [, status, latencyStr] = match;
-      const latencyMs = Number(latencyStr);
-
-      if (status !== 'OK') {
-        ee.emit('error', `frame_rejected_${status}`);
-        return callback(new Error(`frame rejected by ${host}:${port}: ack=${status}`), context);
+      if (msg.status !== 'OK') {
+        ee.emit('error', `frame_rejected_${msg.status}`);
+        return callback(new Error(`frame rejected by ${host}:${port}: ack=${msg.status}`), context);
       }
-
       ee.emit('counter', 'dtu_tcp.frames_acked', 1);
-      ee.emit('histogram', 'dtu_tcp.round_trip_ms', Number.isFinite(latencyMs) ? latencyMs : wallClockMs);
+      const latencyMs = Number(msg.latency_ms);
+      ee.emit('histogram', 'dtu_tcp.round_trip_ms', Number.isFinite(latencyMs) ? latencyMs : Date.now() - startedAt);
       return callback(null, context);
+    },
+    (dispatchErr) => {
+      ee.emit('error', 'pool_dispatch_failed');
+      return callback(dispatchErr, context);
     }
   );
 }

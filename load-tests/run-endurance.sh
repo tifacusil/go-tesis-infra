@@ -69,7 +69,13 @@ region_id=$(grafana_annotate_region_start "Fase 2 · Sistema $SYSTEM · sostenid
 # siempre — de ahí el trap en vez de solo la llamada al final.
 trap 'grafana_annotate_region_end "$region_id"' EXIT
 
-TARGET_HOST="$TARGET_HOST" SUSTAINED_RATE="$SUSTAINED_RATE" artillery run \
+# vu-sustained-12h.yml's arrivalRate is "{{ $processEnvironment.SUSTAINED_RATE }}",
+# which the dtu-tcp engine can't read when sizing its persistent-connection
+# pool (it only sees the literal template string in config.phases) — without
+# this, the pool silently falls back to 50 workers instead of the actual
+# discovered sustained rate. See README-engine.md ("Pool size").
+TARGET_HOST="$TARGET_HOST" SUSTAINED_RATE="$SUSTAINED_RATE" \
+  DTU_ENGINE_POOL_SIZE="${DTU_ENGINE_POOL_SIZE:-$SUSTAINED_RATE}" artillery run \
   --output "$OUTPUT" \
   "$SCENARIO"
 

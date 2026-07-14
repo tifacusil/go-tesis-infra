@@ -9,16 +9,31 @@ which delegates actual frame building + TCP send/ACK to
 
 ## Architecture
 
-Each `send` flow step spawns one subprocess:
+Every scenario in `scenarios/` has exactly **one** `send` step per VU flow —
+a VU here IS one frame, there's no sequence of sends within a VU to amortize
+anything over. So instead of spawning a fresh Python process per `send` step
+(the original design — paid ~224ms interpreter startup on every single
+frame), the engine keeps a small pool of long-lived worker subprocesses alive
+for the whole Artillery run:
 
 ```
-python -m sender fixture --file <contract-example.json> --count 1 --rate 0 \
-  --host <host> --port <port> --no-retry --ack-timeout <n>
+python -m sender stream --host <host> --port <port> --no-retry --ack-timeout <n>
 ```
 
-against the contract example for `spec.sensorType` (default `gnss`), then
-parses dtu-emulator's `ack=<STATUS> in <N>ms` log line to report
-success/failure and latency back to Artillery.
+Each worker holds **one persistent TCP connection** and reads frame-send
+requests as JSON lines from stdin, writing one JSON-line ACK result per
+request to stdout — see `stream_mode.py` in dtu-emulator for the protocol.
+`send` steps from many VUs are dispatched onto the pool round-robin; each
+worker processes its queued requests strictly in order (write request line →
+read response line) over its one connection, so responses always match the
+request that produced them without needing request IDs.
+
+If a worker process dies unexpectedly (crash, connection reset the transport
+couldn't recover from with `--no-retry`), the engine detects the exit, fails
+any requests that were in flight on that worker, and transparently respawns
+it — logged to stderr as `[dtu-tcp] ... is down (...) — respawning`. All pool
+workers are killed on process exit / SIGINT / SIGTERM so a run never leaves
+orphaned Python processes or open connections behind.
 
 **Why shell out instead of building frames in JS:** dtu-emulator is the
 canonical, contract-validated frame encoder (`src/sender/frame.py`,
@@ -27,11 +42,32 @@ canonical, contract-validated frame encoder (`src/sender/frame.py`,
 from the real wire format. The previous engine (`dtu-frame.js`, now removed)
 duplicated this encoding by hand and only supported `gnss`.
 
-**Tradeoff:** measured `dtu_tcp.round_trip_ms` includes Python interpreter
-startup for each request, not just network + server ACK time. At high VU
-counts (100/400) this also means that many concurrent `python` processes
-spawning per second — expect higher CPU overhead on the machine running
-Artillery than the old pure-JS engine had.
+### Pool size
+
+The pool defaults to the scenario's peak `arrivalRate`/`rampTo` (read from
+`config.phases`), so the number of concurrent persistent connections roughly
+matches the busiest moment of the scenario — e.g. `vu-100.yml` gets a
+100-worker pool, `vu-400.yml` gets 400. Override explicitly with:
+
+```bash
+export DTU_ENGINE_POOL_SIZE=50
+```
+
+This is **required** for `vu-sustained-12h.yml`, whose `arrivalRate` is a
+templated `{{ $processEnvironment.SUSTAINED_RATE }}` the engine can't read at
+pool-creation time — without an explicit override it silently falls back to a
+default pool of 50. If unset and no numeric peak can be found anywhere in
+`config.phases`, the engine also falls back to 50 and logs nothing, so set
+this explicitly for any scenario whose rate isn't a plain number in the YAML.
+
+**Tradeoff:** measured `dtu_tcp.round_trip_ms` still includes one Python
+`stream` worker between the wire and the JSON response, but each worker now
+serves many frames over one connection instead of one process per frame — the
+per-frame interpreter-startup cost is gone. A smaller pool than peak VU
+concurrency (e.g. via `DTU_ENGINE_POOL_SIZE` set low deliberately) means
+multiple VUs' frames funnel through the same TCP connection sequentially,
+which no longer maps 1:1 to "N simultaneous sensors" — keep the default
+peak-rate sizing unless you have a specific reason to shrink it.
 
 ### `send` flow step fields
 
@@ -122,7 +158,7 @@ cd tesis-infra/load-tests
 node -e "require('./artillery-engine-dtu-tcp')" && echo "engine loads OK"
 
 # and confirm dtu-emulator itself is reachable/importable:
-PYTHONPATH="$DTU_EMULATOR_PATH/src" ${DTU_EMULATOR_PYTHON:-py} -m sender fixture --help
+PYTHONPATH="$DTU_EMULATOR_PATH/src" ${DTU_EMULATOR_PYTHON:-py} -m sender stream --help
 ```
 
 If the first fails with `Cannot find module`, `NODE_PATH` isn't set correctly
