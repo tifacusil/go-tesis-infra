@@ -11,7 +11,11 @@
 
 check_dtu_emulator() {
   local script_dir="$1" # load-tests/ (para resolver el default relativo)
-  local dtu_path="${DTU_EMULATOR_PATH:-$(cd "$script_dir/../../../dtu-emulator" 2>/dev/null && pwd)}"
+  # OJO: el default DEBE coincidir con el del engine (index.js resuelve
+  # __dirname/../../../dtu-emulator = tesis-infra/../dtu-emulator). Desde
+  # load-tests/ eso es ../../dtu-emulator — si difieren, este check puede
+  # validar una ruta que el engine no va a usar.
+  local dtu_path="${DTU_EMULATOR_PATH:-$(cd "$script_dir/../../dtu-emulator" 2>/dev/null && pwd)}"
 
   if [[ -z "$dtu_path" || ! -d "$dtu_path" ]]; then
     echo "ERROR: no se encontró dtu-emulator." >&2
@@ -47,6 +51,16 @@ check_dtu_emulator() {
   if ! PYTHONPATH="$dtu_path/src" "$python_bin" -m sender fixture --help >/dev/null 2>&1; then
     echo "ERROR: '$python_bin -m sender fixture --help' falló contra DTU_EMULATOR_PATH=$dtu_path." >&2
     echo "  Confirmar que el repo esté completo y sin errores de sintaxis." >&2
+    return 1
+  fi
+
+  # El engine pooled usa el modo `stream` (no `fixture`) — un clon viejo de
+  # dtu-emulator sin ese subcomando pasaría el check de arriba y después cada
+  # worker del pool moriría al spawnearse, con TODA la corrida fallando.
+  if ! PYTHONPATH="$dtu_path/src" "$python_bin" -m sender stream --help >/dev/null 2>&1; then
+    echo "ERROR: '$python_bin -m sender stream --help' falló contra DTU_EMULATOR_PATH=$dtu_path." >&2
+    echo "  El engine de Artillery usa 'sender stream' (pool de workers persistentes)." >&2
+    echo "  Actualizar el clon de dtu-emulator (git pull) — versiones viejas no tienen ese modo." >&2
     return 1
   fi
 

@@ -42,6 +42,19 @@ const DEFAULT_PORT = 5000; // puerto TCP de data-receiving-1 (ver docker-compose
 const DEFAULT_SENSOR_TYPE = 'gnss';
 const DEFAULT_POOL_SIZE = 50; // fallback when pool size can't be inferred — see resolvePoolSize
 
+// Client-side ceiling on how long a `send` may sit queued + in flight on a
+// worker before its VU is failed. The Python worker already bounds each
+// network operation at ACK_TIMEOUT_MS, so in a healthy run this never fires;
+// it exists so a wedged worker (or a backlog that outlives the run) can't
+// leave VU callbacks pending forever — Artillery only exits once every VU
+// has completed, so an unbounded wait here means a run that never ends.
+const SEND_TIMEOUT_MS = (() => {
+  const n = Number(process.env.DTU_ENGINE_SEND_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? Math.ceil(n) : 120000;
+})();
+
+const RESPAWN_DELAY_MS = 1000; // breather before replacing a dead worker, so a crash-on-start bug can't become a tight spawn storm
+
 const DTU_EMULATOR_PATH = path.resolve(
   process.env.DTU_EMULATOR_PATH || path.join(__dirname, '..', '..', '..', 'dtu-emulator')
 );
@@ -70,6 +83,19 @@ function resolvePythonBin() {
 
 const pools = new Map(); // "host:port" -> Pool
 const allWorkers = new Set();
+let shuttingDown = false;
+
+// A pending entry may be settled by exactly one of: its response line, a
+// write error, worker death, or the SEND_TIMEOUT_MS timer. _settle makes
+// whichever happens first win and the rest no-ops, so a late response can't
+// double-resolve a VU callback.
+function _settle(entry, err, value) {
+  if (entry.settled) return;
+  entry.settled = true;
+  clearTimeout(entry.timer);
+  if (err) entry.reject(err);
+  else entry.resolve(value);
+}
 
 // Sizes the pool to the scenario's peak arrivalRate/rampTo (roughly: how many
 // concurrent connections the old per-frame-spawn model would have opened at
@@ -120,27 +146,35 @@ function spawnWorker(host, port) {
     const entry = worker.pending.shift();
     if (!entry) return; // stray output (e.g. a log line), ignore
     try {
-      entry.resolve(JSON.parse(line));
+      _settle(entry, null, JSON.parse(line));
     } catch (parseErr) {
-      entry.reject(new Error(`unparseable stream worker response: ${line}`));
+      _settle(entry, new Error(`unparseable stream worker response: ${line}`));
     }
   });
 
   proc.stderr.pipe(process.stderr);
 
   function onDown(reason) {
+    if (worker.down) return; // 'error' and 'exit' can both fire for the same death
+    worker.down = true;
     allWorkers.delete(worker);
     const err = new Error(`dtu-emulator stream worker for ${host}:${port} is down (${reason})`);
-    for (const entry of worker.pending.splice(0)) entry.reject(err);
-    if (worker.closing) return;
-    console.error(`[dtu-tcp] ${err.message} — respawning`);
-    const pool = pools.get(`${host}:${port}`);
-    if (!pool) return;
-    try {
-      pool.replace(worker, spawnWorker(host, port));
-    } catch (respawnErr) {
-      console.error(`[dtu-tcp] failed to respawn worker for ${host}:${port}: ${respawnErr.message}`);
-    }
+    for (const entry of worker.pending.splice(0)) _settle(entry, err);
+    if (worker.closing || shuttingDown) return;
+    console.error(`[dtu-tcp] ${err.message} — respawning in ${RESPAWN_DELAY_MS}ms`);
+    // Deferred (and unref'd, so it can't hold the process open at shutdown):
+    // an immediate respawn of a worker that dies on startup would loop as
+    // fast as the OS can fork Python.
+    setTimeout(() => {
+      if (shuttingDown) return;
+      const pool = pools.get(`${host}:${port}`);
+      if (!pool) return;
+      try {
+        pool.replace(worker, spawnWorker(host, port));
+      } catch (respawnErr) {
+        console.error(`[dtu-tcp] failed to respawn worker for ${host}:${port}: ${respawnErr.message}`);
+      }
+    }, RESPAWN_DELAY_MS).unref();
   }
 
   proc.on('exit', (code, signal) => onDown(`exit code=${code} signal=${signal}`));
@@ -165,14 +199,25 @@ class Pool {
   send(request) {
     const worker = this.workers[this.nextIndex % this.workers.length];
     this.nextIndex += 1;
+    const { host, port } = this;
     return new Promise((resolve, reject) => {
-      const entry = { resolve, reject };
+      const entry = { resolve, reject, settled: false, timer: null };
+      // On timeout the entry stays in the worker's FIFO on purpose: its
+      // response (if it ever arrives) must still consume this queue slot,
+      // otherwise every later response would resolve the wrong VU. _settle's
+      // guard turns that late consumption into a no-op.
+      entry.timer = setTimeout(() => {
+        _settle(entry, new Error(`no response from stream worker for ${host}:${port} within ${SEND_TIMEOUT_MS}ms (queued + in flight)`));
+      }, SEND_TIMEOUT_MS);
+      entry.timer.unref();
       worker.pending.push(entry);
       worker.proc.stdin.write(`${JSON.stringify(request)}\n`, (writeErr) => {
         if (!writeErr) return;
+        // Write never reached the worker, so no response will come — safe to
+        // drop the entry from the FIFO entirely.
         const idx = worker.pending.indexOf(entry);
         if (idx !== -1) worker.pending.splice(idx, 1);
-        reject(writeErr);
+        _settle(entry, writeErr);
       });
     });
   }
@@ -189,6 +234,7 @@ function getPool(host, port, size) {
 }
 
 function killAllWorkers() {
+  shuttingDown = true;
   for (const worker of allWorkers) {
     worker.closing = true;
     try { worker.proc.stdin.end(); } catch (_) { /* already closed */ }
