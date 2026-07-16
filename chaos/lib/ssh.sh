@@ -25,12 +25,16 @@
 #   SSH_KEY_PATH     ruta a llave privada SSH, alternativa a SSH_PASSWORD
 #   SSH_PORT         default: 22
 #   SUDO_PASSWORD    password de sudo remoto, si kubectl/crictl requieren root
-#                    para leer el kubeconfig de k3s (típico en Sistema B)
+#                    para leer el kubeconfig de k3s (típico en Sistema B), o si
+#                    systemctl/rabbitmqctl requieren root (típico en Sistema A)
 #   K8S_NAMESPACE    default: landslide (solo para _kubectl)
+#   SSH_ORCHESTRATOR k8s (Sistema B) | native (Sistema A). Mismos valores que
+#                    load-tests/reset-state.sh, para reusar el bloque de .env.
 
 SSH_PORT="${SSH_PORT:-22}"
 SUDO_PASSWORD="${SUDO_PASSWORD:-}"
 K8S_NAMESPACE="${K8S_NAMESPACE:-landslide}"
+SSH_ORCHESTRATOR="${SSH_ORCHESTRATOR:-k8s}"
 
 # _ssh_require — valida que estén las variables mínimas de conexión. Se llama
 # al inicio de cada escenario que inyecta remoto, para fallar temprano con un
@@ -93,5 +97,21 @@ _kubectl() {
     _ssh_run "echo $(printf '%q' "$SUDO_PASSWORD") | sudo -S -p '' kubectl$quoted"
   else
     _ssh_run "kubectl$quoted"
+  fi
+}
+
+# _sudo_run <comando remoto> — corre un comando como root EN el servidor remoto.
+# Es el equivalente de _kubectl para el Sistema A, donde los servicios son
+# unidades systemd nativas y la inyección se hace con systemctl / rabbitmqctl /
+# tc, todos los cuales requieren root.
+#
+# A diferencia de _kubectl, recibe la línea de comando ya armada (no argv), para
+# poder pasar pipelines. El caller es responsable de citar lo que necesite.
+_sudo_run() {
+  local remote_cmd="$1"
+  if [[ -n "$SUDO_PASSWORD" ]]; then
+    _ssh_run "echo $(printf '%q' "$SUDO_PASSWORD") | sudo -S -p '' sh -c $(printf '%q' "$remote_cmd")"
+  else
+    _ssh_run "sudo -n sh -c $(printf '%q' "$remote_cmd")"
   fi
 }
