@@ -1,62 +1,154 @@
 #!/usr/bin/env bash
-# run-during-endurance.sh — orquesta las 3 inyecciones de chaos existentes
-# (kill-rabbitmq, pause-data-management, netem-delay-ew-da) DURANTE la corrida
-# de 12h de load-tests/run-endurance.sh (Fase 2 del plan de pruebas), en vez
-# de correrlas contra un sistema en reposo.
+# run-during-endurance.sh — orquesta las inyecciones de chaos DURANTE la corrida
+# de 12h de load-tests/run-endurance.sh (Fase 2 del plan de pruebas), en vez de
+# correrlas contra un sistema en reposo.
 #
-# Cadencia: 3 inyecciones espaciadas, una por escenario, con margen para que
-# el sistema se recupere por completo entre una y la siguiente antes de medir
-# el efecto de la próxima:
-#   t=2h   kill-rabbitmq.sh            (mata el broker, mide MTTR + pérdida)
-#   t=6h   pause-data-management.sh 30 (pausa una réplica, mide blast radius)
-#   t=10h  netem-delay-ew-da.sh 2000 60 (latencia alta, mide circuit breaker)
+# Cadencia: inyecciones espaciadas, una por escenario, con margen para que el
+# sistema se recupere por completo entre una y la siguiente:
+#   t=2h   kill-rabbitmq.sh                (mata el broker, mide MTTR)
+#   t=6h   pause-data-management.sh 90     (congela una replica, mide blast radius)
+#   t=10h  netem-delay-ew-da.sh 8000 180   (latencia alta, mide circuit breaker) [solo B]
 #
-# Los offsets se miden desde el arranque de ESTE script, no desde que la
-# carga alcanza régimen sostenido — run-endurance.sh tiene 3 min de ramp-up
-# antes de la fase sostenida (vu-sustained-12h.yml), así que "t+2h" cae en
-# realidad ~3 min dentro de la ventana sostenida, no exactamente a las 2h00m00s
-# de carga plena. Diferencia cosmética, no afecta la validez del experimento.
+# Los offsets se miden desde el arranque de ESTE script, no desde que la carga
+# alcanza régimen sostenido — run-endurance.sh tiene 3 min de ramp-up antes de
+# la fase sostenida (vu-sustained-12h.yml), así que "t+2h" cae en realidad ~3
+# min dentro de la ventana sostenida. Diferencia cosmética.
 #
-# Uso: correr en paralelo con run-endurance.sh, apuntando al mismo host/infra:
-#   cd tesis-infra
+# ── Preflight (lo más importante de este script) ─────────────────────────────
+# Antes de esperar la primera inyección se valida TODO lo que necesita: SSH,
+# sudo, Prometheus, gateway y que el target exista. Sin esto, un typo en las
+# credenciales se descubre recién a las 2h de corrida, con las 3 inyecciones
+# perdidas y una ventana de 12h que hay que rehacer desde cero.
+#
+# ── Por sistema ──────────────────────────────────────────────────────────────
+# SSH_ORCHESTRATOR es obligatorio: define contra qué sistema se inyecta y cómo.
+#   - native (Sistema A): kill-rabbitmq + pause-data-management. netem-delay se
+#     SALTEA: no está implementado para A y, sobre todo, A no tiene circuit
+#     breaker — el observable de ese escenario no existe ahí. Saltearlo no
+#     cuenta como fallo.
+#   - k8s (Sistema B): los 3 escenarios.
+#
+# Uso: correr en paralelo con run-endurance.sh, apuntando al mismo sistema:
 #   TARGET_HOST=<host>:5000 SUSTAINED_RATE=<tasa-fase-1> SYSTEM=B \
 #     ./load-tests/run-endurance.sh &
-#   ./chaos/run-during-endurance.sh &   # GATEWAY_URL opcional — ver abajo
+#   SSH_HOST=178.105.104.95 SSH_USER=gotesis SSH_KEY_PATH=~/.ssh/gotesis-key \
+#     SUDO_PASSWORD=*** SSH_ORCHESTRATOR=k8s \
+#     PROMETHEUS_ADDR=http://178.105.104.95:31083 \
+#     ./chaos/run-during-endurance.sh &
 #   wait
 #
-# GATEWAY_URL: setearlo solo si el gateway HTTP es alcanzable directo (Sistema
-# A). Para Sistema B (Traefik :80 no expuesto, solo TCP 5000 hacia afuera),
-# dejarlo sin setear y tener SSH_HOST/SSH_USER + SSH_KEY_PATH|SSH_PASSWORD en
-# load-tests/.env: pause-data-management.sh abre un túnel SSH automático al
-# :80 del server para el sondeo — ver chaos/lib/gateway-tunnel.sh.
-#
-# Requiere Docker (Pumba) y Prometheus accesibles, igual que cada script
-# individual (ver chaos/README.md). Los resultados de cada inyección van a
-# chaos/results/ con su timestamp epoch, igual que si se corrieran solas —
-# NO invalidan el criterio de éxito §2.4 de la Fase 2 (carga sostenida sin
+# Los resultados de cada inyección van a chaos/results/ con su timestamp, igual
+# que si se corrieran solas — NO invalidan el criterio §2.4 (carga sostenida sin
 # fallos inyectados); alimentan el criterio aparte §2.5 (tolerancia a fallos
 # bajo carga sostenida).
 #
-# Una inyección que falla (Docker caído, contenedor renombrado, etc.) NO
-# aborta las siguientes — se registra el fallo y se sigue con el próximo
-# horario. Perder 1 de 3 inyecciones por un problema de infra puntual es
-# preferible a perder las 3 restantes de una corrida de 12h por un solo
-# fallo en la primera.
+# Una inyección que falla NO aborta las siguientes: perder 1 de 3 por un
+# problema puntual es preferible a perder las 2 restantes de una corrida de 12h.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Sin default acá: se pasa vacío y pause-data-management.sh resuelve solo
-# (GATEWAY_URL explícito > túnel SSH automático si SSH_HOST está seteado >
-# localhost del stack local) — ver chaos/lib/gateway-tunnel.sh.
-GATEWAY_URL="${GATEWAY_URL:-}"
+source "$SCRIPT_DIR/lib/capture.sh"
+source "$SCRIPT_DIR/lib/ssh.sh"
 
-# Offsets en segundos desde el inicio de esta corrida.
-OFFSET_KILL_RABBITMQ=$((2 * 3600))
-OFFSET_PAUSE_DATA_MGMT=$((6 * 3600))
-OFFSET_NETEM_DELAY=$((10 * 3600))
+# Offsets en segundos desde el inicio de esta corrida. Overridables para poder
+# probar el orquestador sin esperar 12h (ej. OFFSET_KILL_RABBITMQ=5).
+OFFSET_KILL_RABBITMQ="${OFFSET_KILL_RABBITMQ:-$((2 * 3600))}"
+OFFSET_PAUSE_DATA_MGMT="${OFFSET_PAUSE_DATA_MGMT:-$((6 * 3600))}"
+OFFSET_NETEM_DELAY="${OFFSET_NETEM_DELAY:-$((10 * 3600))}"
+
+# Parámetros de cada escenario. Los defaults NO son arbitrarios:
+#   PAUSE_DURATION=90: con menos de ~50s, B cae en zona muerta — su readiness
+#     recién saca el pod de Endpoints a los ~35s y el resultado diría "nunca
+#     desvió" por la ventana corta, no por el sistema.
+#   NETEM_DELAY_MS=8000: tiene que superar DATA_ANALYSIS_TIMEOUT_MS (5000). Un
+#     delay menor no produce fallos (la llamada responde lenta pero OK) y el
+#     breaker no puede abrir: el escenario "pasaría" sin medir nada.
+PAUSE_DURATION="${PAUSE_DURATION:-90}"
+NETEM_DELAY_MS="${NETEM_DELAY_MS:-8000}"
+NETEM_DURATION="${NETEM_DURATION:-180}"
 
 start_ts=$(date +%s)
 failures=0
+skipped=0
+
+_ssh_require
+case "${SSH_ORCHESTRATOR:-}" in
+  native) SYSTEM_TAG="Sistema A (systemd nativo)" ;;
+  k8s)    SYSTEM_TAG="Sistema B (k3s)" ;;
+  *)
+    echo "ERROR: SSH_ORCHESTRATOR es obligatorio — 'native' (Sistema A) o 'k8s' (Sistema B)." >&2
+    echo "  Define contra qué sistema se inyecta y cómo. Sin esto el orquestador no sabe si el" >&2
+    echo "  broker es un pod o una unit de systemd, y las inyecciones fallarían a las 2h de corrida." >&2
+    exit 1
+    ;;
+esac
+
+# ── Preflight ────────────────────────────────────────────────────────────────
+echo "=== Preflight (antes de comprometer 12h de corrida) ==="
+preflight_errors=0
+_check() {
+  local desc="$1"; shift
+  if "$@" >/dev/null 2>&1; then
+    echo "  OK   $desc"
+  else
+    echo "  FALLA $desc" >&2
+    preflight_errors=$((preflight_errors + 1))
+  fi
+}
+
+_check "SSH a $SSH_USER@$SSH_HOST" _ssh_run "true"
+_check "sudo remoto" _sudo_run "id -u"
+
+if [[ "$(prom_query 'vector(1)')" == "1" ]]; then
+  echo "  OK   Prometheus en $PROMETHEUS_ADDR (SYSTEM=${SYSTEM:-?})"
+else
+  echo "  FALLA Prometheus en $PROMETHEUS_ADDR — los snapshots quedarían vacíos" >&2
+  preflight_errors=$((preflight_errors + 1))
+fi
+
+# Funcion y no `bash -c "... _sudo_run ..."`: bash -c abre un shell nuevo donde
+# las funciones de lib/ssh.sh no existen, y el chequeo daria FALLA siempre.
+_check_rabbit_unit() {
+  local pid
+  pid=$(_sudo_run "systemctl show rabbitmq-server -p MainPID --value" 2>/dev/null | tr -d '\r')
+  [[ -n "$pid" && "$pid" != "0" ]]
+}
+
+if [[ "$SSH_ORCHESTRATOR" == "native" ]]; then
+  _check "unit rabbitmq-server corriendo" _check_rabbit_unit
+  gw_url="${GATEWAY_URL:-http://${SSH_HOST}/health/data-management}"
+else
+  _check "kubectl remoto (namespace $K8S_NAMESPACE)" _kubectl get ns "$K8S_NAMESPACE"
+  _check "pods de rabbitmq" _kubectl get pods -l app=rabbitmq -n "$K8S_NAMESPACE"
+  gw_url="${GATEWAY_URL:-http://${SSH_HOST}/api/v1/data/health}"
+fi
+
+gw_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$gw_url" 2>/dev/null || echo "000")
+if [[ "$gw_code" == "200" ]]; then
+  echo "  OK   gateway $gw_url"
+else
+  echo "  AVISO gateway $gw_url -> $gw_code (pause-data-management intentará el túnel SSH)" >&2
+fi
+
+if [[ "$preflight_errors" -gt 0 ]]; then
+  echo "" >&2
+  echo "ERROR: $preflight_errors chequeo(s) de preflight fallaron — se aborta ANTES de arrancar." >&2
+  echo "  Arreglar y volver a lanzar: descubrir esto a las 2h significa perder la corrida entera." >&2
+  exit 1
+fi
+
+echo ""
+echo "=== Orquestador de chaos durante endurance (12h) ==="
+echo "    Inicio:  $(date '+%Y-%m-%d %H:%M:%S')"
+echo "    Destino: $SYSTEM_TAG — $SSH_USER@$SSH_HOST"
+echo "    Plan:    t+$((OFFSET_KILL_RABBITMQ / 60))min kill-rabbitmq"
+echo "             t+$((OFFSET_PAUSE_DATA_MGMT / 60))min pause-data-management ${PAUSE_DURATION}s"
+if [[ "$SSH_ORCHESTRATOR" == "k8s" ]]; then
+  echo "             t+$((OFFSET_NETEM_DELAY / 60))min netem-delay-ew-da ${NETEM_DELAY_MS}ms ${NETEM_DURATION}s"
+else
+  echo "             (netem-delay-ew-da: se saltea — el Sistema A no tiene circuit breaker que medir)"
+fi
+echo ""
 
 wait_until_offset() {
   local target_offset="$1"
@@ -65,7 +157,7 @@ wait_until_offset() {
   elapsed=$(( now - start_ts ))
   remaining=$(( target_offset - elapsed ))
   if [[ "$remaining" -gt 0 ]]; then
-    echo "[$(date '+%H:%M:%S')] Esperando ${remaining}s hasta t+$(( target_offset / 3600 ))h..."
+    echo "[$(date '+%H:%M:%S')] Esperando ${remaining}s hasta t+$(( target_offset / 60 ))min..."
     sleep "$remaining"
   fi
 }
@@ -75,35 +167,36 @@ wait_until_offset() {
 run_injection() {
   local label="$1"; shift
   if ! "$@"; then
-    echo "AVISO: la inyección '$label' terminó con error — se continúa con las siguientes programadas. Ver salida arriba para la causa." >&2
+    echo "AVISO: la inyección '$label' terminó con error — se continúa con las siguientes programadas." >&2
     failures=$((failures + 1))
   fi
 }
 
-echo "=== Orquestador de chaos durante endurance (12h) ==="
-echo "    Inicio: $(date '+%Y-%m-%d %H:%M:%S')"
-echo "    Inyecciones: t+2h kill-rabbitmq | t+6h pause-data-management | t+10h netem-delay"
-echo ""
-
 wait_until_offset "$OFFSET_KILL_RABBITMQ"
-echo "--- [t+2h] Disparando kill-rabbitmq.sh ---"
+echo "--- [t+$((OFFSET_KILL_RABBITMQ / 60))min] kill-rabbitmq.sh ---"
 run_injection "kill-rabbitmq" "$SCRIPT_DIR/kill-rabbitmq.sh"
 
 wait_until_offset "$OFFSET_PAUSE_DATA_MGMT"
-echo "--- [t+6h] Disparando pause-data-management.sh (30s) ---"
-run_injection "pause-data-management" "$SCRIPT_DIR/pause-data-management.sh" 30 "$GATEWAY_URL"
+echo "--- [t+$((OFFSET_PAUSE_DATA_MGMT / 60))min] pause-data-management.sh ${PAUSE_DURATION}s ---"
+run_injection "pause-data-management" "$SCRIPT_DIR/pause-data-management.sh" "$PAUSE_DURATION" "${GATEWAY_URL:-}"
 
-wait_until_offset "$OFFSET_NETEM_DELAY"
-echo "--- [t+10h] Disparando netem-delay-ew-da.sh (2000ms, 60s) ---"
-run_injection "netem-delay-ew-da" "$SCRIPT_DIR/netem-delay-ew-da.sh" 2000 60
+if [[ "$SSH_ORCHESTRATOR" == "k8s" ]]; then
+  wait_until_offset "$OFFSET_NETEM_DELAY"
+  echo "--- [t+$((OFFSET_NETEM_DELAY / 60))min] netem-delay-ew-da.sh ${NETEM_DELAY_MS}ms ${NETEM_DURATION}s ---"
+  run_injection "netem-delay-ew-da" "$SCRIPT_DIR/netem-delay-ew-da.sh" "$NETEM_DELAY_MS" "$NETEM_DURATION"
+else
+  echo "--- netem-delay-ew-da: SALTEADO (Sistema A no tiene circuit breaker) ---"
+  skipped=$((skipped + 1))
+fi
 
 echo ""
+attempted=$(( 3 - skipped ))
 if [[ "$failures" -eq 0 ]]; then
-  echo "=== 3 inyecciones completadas sin errores ==="
+  echo "=== $attempted inyecciones completadas sin errores${skipped:+ ($skipped salteada(s))} ==="
 else
-  echo "=== 3 inyecciones intentadas, $failures fallaron (ver AVISOs arriba) ==="
+  echo "=== $attempted inyecciones intentadas, $failures fallaron (ver AVISOs arriba) ==="
 fi
-echo "    Ver resultados en chaos/results/ (prefijos kill-rabbitmq-*, pause-data-management-*, netem-delay-ew-da-*)"
+echo "    Resultados en chaos/results/ (kill-rabbitmq-*, pause-data-management-*, netem-delay-ew-da-*)"
 
 if [[ "$failures" -gt 0 ]]; then
   exit 1

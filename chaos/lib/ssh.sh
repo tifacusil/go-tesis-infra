@@ -30,11 +30,18 @@
 #   K8S_NAMESPACE    default: landslide (solo para _kubectl)
 #   SSH_ORCHESTRATOR k8s (Sistema B) | native (Sistema A). Mismos valores que
 #                    load-tests/reset-state.sh, para reusar el bloque de .env.
+#                    SIN default a propósito: ver abajo.
 
 SSH_PORT="${SSH_PORT:-22}"
 SUDO_PASSWORD="${SUDO_PASSWORD:-}"
 K8S_NAMESPACE="${K8S_NAMESPACE:-landslide}"
-SSH_ORCHESTRATOR="${SSH_ORCHESTRATOR:-k8s}"
+# SSH_ORCHESTRATOR NO lleva default. Tenía `:-k8s`, y eso hacía que nunca
+# quedara vacío: las validaciones `case ... k8s|native) ;; *) error` de todos
+# los escenarios eran letra muerta y olvidarse la variable elegía B en silencio.
+# Con SSH_HOST apuntando a A eso da "A + semántica de k8s": kubectl contra un
+# server sin k8s, errores confusos, y en el peor caso inyectar donde no era.
+# Que falte tiene que ser un error ruidoso, no una elección implícita.
+SSH_ORCHESTRATOR="${SSH_ORCHESTRATOR:-}"
 
 # _ssh_require — valida que estén las variables mínimas de conexión. Se llama
 # al inicio de cada escenario que inyecta remoto, para fallar temprano con un
