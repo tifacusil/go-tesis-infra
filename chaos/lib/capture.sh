@@ -17,21 +17,66 @@
 # valida explícitamente el intérprete antes de usarlo, en vez de confiar en
 # que `set -e` capture el problema.
 
-# Resolución de PROMETHEUS_ADDR: explícito > por sistema (SYSTEM=A/B) >
-# localhost. Las métricas de chaos (data_receiving_messages_published_total,
-# ew_circuit_breaker_state, ew_alerts_published_total) están confirmadas en
-# ambos Prometheus.
+PROM_A_ADDR="http://204.168.203.32:9090"
+PROM_B_ADDR="http://178.105.104.95:31083"
+
+# Resolución de SYSTEM (A=baseline Java/Python, B=Go): explícito > inferido de
+# PROMETHEUS_ADDR > inferido de SSH_ORCHESTRATOR (native=A, k8s=B, los mismos
+# valores que usan reset-state.sh y los escenarios de chaos). Hace falta saber
+# el sistema aunque PROMETHEUS_ADDR venga explícito, porque los NOMBRES de las
+# métricas difieren entre A y B (ver el bloque de abajo).
+if [[ -z "${SYSTEM:-}" ]]; then
+  case "${PROMETHEUS_ADDR:-}" in
+    *204.168.203.32*) SYSTEM="A" ;;
+    *178.105.104.95*) SYSTEM="B" ;;
+  esac
+fi
+if [[ -z "${SYSTEM:-}" ]]; then
+  case "${SSH_ORCHESTRATOR:-}" in
+    native) SYSTEM="A" ;;
+    k8s) SYSTEM="B" ;;
+  esac
+fi
+
+# Resolución de PROMETHEUS_ADDR: explícito > por sistema > localhost.
 if [[ -z "${PROMETHEUS_ADDR:-}" ]]; then
   case "${SYSTEM:-}" in
-    A) PROMETHEUS_ADDR="http://204.168.203.32:9090" ;;
-    B) PROMETHEUS_ADDR="http://178.105.104.95:31083" ;;
+    A) PROMETHEUS_ADDR="$PROM_A_ADDR" ;;
+    B) PROMETHEUS_ADDR="$PROM_B_ADDR" ;;
     "") PROMETHEUS_ADDR="http://localhost:9090"
         echo "  (capture: ni PROMETHEUS_ADDR ni SYSTEM seteados — usando $PROMETHEUS_ADDR, que solo sirve para el stack local. Para una corrida real: export SYSTEM=A|B o PROMETHEUS_ADDR=http://<host>:<puerto>)" >&2 ;;
     *) PROMETHEUS_ADDR="http://localhost:9090"
        echo "  (capture: SYSTEM='$SYSTEM' desconocido (esperado A o B) — usando $PROMETHEUS_ADDR)" >&2 ;;
   esac
 fi
-echo "  (capture: PROMETHEUS_ADDR=$PROMETHEUS_ADDR)" >&2
+echo "  (capture: SYSTEM=${SYSTEM:-desconocido} PROMETHEUS_ADDR=$PROMETHEUS_ADDR)" >&2
+
+# ── Nombres de métricas por sistema ──────────────────────────────────────────
+# A (baseline Java/Python) y B (Go) bautizaron distinto las mismas métricas, y
+# algunas directamente no existen en A. Tener los nombres de B hardcodeados
+# hacía que TODO snapshot contra A saliera NaN salvo 'published': el MTTR se
+# medía bien pero "mensajes perdidos" quedaba vacío sin avisar.
+#
+# METRIC_* vacío = el concepto NO se puede medir en ese sistema (no es un
+# rename, no hay equivalente). Se reporta 'n/a', nunca NaN: NaN se confunde con
+# "falló la consulta a Prometheus" y hace dudar de un dato que en realidad no
+# existe.
+case "${SYSTEM:-}" in
+  A)
+    METRIC_PUBLISHED="data_receiving_messages_published_total"
+    METRIC_CONSUMED_EW="ew_messages_processed_total"
+    METRIC_CONSUMED_DM="dm_messages_processed_total" # requiere el jar con actuator
+    METRIC_DROPPED=""                                # A no expone dropped de EW
+    METRIC_REDIS_PENDING=""                          # A no expone el backlog Redis
+    ;;
+  *)
+    METRIC_PUBLISHED="data_receiving_messages_published_total"
+    METRIC_CONSUMED_EW="ew_messages_consumed_total"
+    METRIC_CONSUMED_DM="dm_messages_processed_total"
+    METRIC_DROPPED="ew_messages_dropped_total"
+    METRIC_REDIS_PENDING="data_receiving_redis_buffer_pending"
+    ;;
+esac
 RESULTS_DIR="${RESULTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/results}"
 mkdir -p "$RESULTS_DIR"
 
@@ -137,18 +182,34 @@ wait_for_health() {
   return 1
 }
 
-# snapshot_counters <label> — guarda published/consumed/breaker-state actuales,
-# para comparar antes/despues y estimar mensajes perdidos.
+# _snap_value <metric_name_o_vacio> — suma la métrica, o reporta que el sistema
+# bajo prueba no la expone. Distinguirlo importa: 'n/a' es "acá no se puede
+# medir esto" y 'ERR' es "no pude preguntarle a Prometheus" — confundirlos lleva
+# a leer un dato faltante como un dato malo, o al revés.
+_snap_value() {
+  local metric="$1"
+  if [[ -z "$metric" ]]; then
+    echo "n/a (Sistema ${SYSTEM:-?} no expone esta metrica)"
+    return 0
+  fi
+  prom_query "sum($metric)"
+}
+
+# snapshot_counters <label> — guarda published/consumed/dropped actuales, para
+# comparar antes/despues y estimar mensajes perdidos. Los nombres salen del
+# bloque METRIC_* de arriba, que depende de SYSTEM.
 snapshot_counters() {
   local label="$1"
   local ts
   ts=$(date +%s)
   {
     echo "timestamp=$ts"
-    echo "published=$(prom_query 'sum(data_receiving_messages_published_total)')"
-    echo "consumed=$(prom_query 'sum(ew_messages_consumed_total)')"
-    echo "dropped=$(prom_query 'sum(ew_messages_dropped_total)')"
-    echo "redis_buffer_pending=$(prom_query 'sum(data_receiving_redis_buffer_pending)')"
+    echo "system=${SYSTEM:-desconocido}"
+    echo "published=$(_snap_value "$METRIC_PUBLISHED")"
+    echo "consumed_ew=$(_snap_value "$METRIC_CONSUMED_EW")"
+    echo "consumed_dm=$(_snap_value "$METRIC_CONSUMED_DM")"
+    echo "dropped=$(_snap_value "$METRIC_DROPPED")"
+    echo "redis_buffer_pending=$(_snap_value "$METRIC_REDIS_PENDING")"
   } > "$RESULTS_DIR/${label}-${ts}.snapshot"
   echo "$RESULTS_DIR/${label}-${ts}.snapshot"
 }
