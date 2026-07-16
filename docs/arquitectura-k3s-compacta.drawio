@@ -1,0 +1,136 @@
+<mxfile host="app.diagrams.net" agent="claude-code" version="24.0.0">
+  <diagram id="k3s-compacta" name="Arquitectura k3s (compacta)">
+    <mxGraphModel dx="1400" dy="820" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="840" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Sistema de monitoreo de deslizamientos — Vista compacta (k3s / Sistema B)" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="900" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Terminals ===== -->
+        <mxCell id="grp_iot" value="Terminal IoT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(transparent,#FFE599);dashed=1;dashPattern=8 8;strokeColor=light-dark(#000000,#999999);arcSize=8;verticalAlign=top;fontStyle=1;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="48" width="600" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="iot_sensor" value="Sensores DTU — nivel de agua" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" vertex="1" parent="1">
+          <mxGeometry x="70" y="82" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="iot_dtu" value="Data Collecting Unit&#10;TCP :5000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" vertex="1" parent="1">
+          <mxGeometry x="360" y="82" width="250" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="grp_user" value="Terminal Usuario" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(transparent,#FFE599);dashed=1;dashPattern=8 8;strokeColor=light-dark(#000000,#999999);arcSize=8;verticalAlign=top;fontStyle=1;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="760" y="48" width="600" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="user_client" value="Clientes REST / Dashboard" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" vertex="1" parent="1">
+          <mxGeometry x="790" y="82" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="user_http" value="HTTP /api/v1/*" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" vertex="1" parent="1">
+          <mxGeometry x="1080" y="82" width="250" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Gateway bar ===== -->
+        <mxCell id="traefik_bar" value="Traefik (k3s built-in) — Ingress / balanceo p2c · IngressRoute PathPrefix + stripPrefix" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#CCCCCC);strokeColor=light-dark(#000000,#666666);fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="188" width="1320" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Microservices row (instance-count boxes) ===== -->
+        <!-- data-receiving x3 (two stacked shadows) -->
+        <mxCell id="s1_sh2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#F5F5F5,#D0D0D0);strokeColor=light-dark(#000000,#999999);" vertex="1" parent="1"><mxGeometry x="62" y="294" width="200" height="170" as="geometry" /></mxCell>
+        <mxCell id="s1_sh1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FAFAFA,#DBDBDB);strokeColor=light-dark(#000000,#999999);" vertex="1" parent="1"><mxGeometry x="55" y="287" width="200" height="170" as="geometry" /></mxCell>
+        <mxCell id="s1" value="&lt;b&gt;data-receiving&lt;/b&gt;&#10;&lt;b&gt;×3&lt;/b&gt; instancias&#10;&#10;TCP :5000 · HTTP :8080&#10;OUT: RabbitMQ (pub)&#10;buffer: Redis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="48" y="280" width="200" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- data-management x2 (one shadow) -->
+        <mxCell id="s2_sh1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FAFAFA,#DBDBDB);strokeColor=light-dark(#000000,#999999);" vertex="1" parent="1"><mxGeometry x="271" y="287" width="200" height="170" as="geometry" /></mxCell>
+        <mxCell id="s2" value="&lt;b&gt;data-management&lt;/b&gt;&#10;&lt;b&gt;×2&lt;/b&gt; instancias&#10;&#10;HTTP :8080 · gRPC :9090&#10;consume: persist&#10;DB: mysql-data-management" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="264" y="280" width="200" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- early-warning x2 (one shadow) -->
+        <mxCell id="s3_sh1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FAFAFA,#DBDBDB);strokeColor=light-dark(#000000,#999999);" vertex="1" parent="1"><mxGeometry x="487" y="287" width="200" height="170" as="geometry" /></mxCell>
+        <mxCell id="s3" value="&lt;b&gt;early-warning&lt;/b&gt;&#10;&lt;b&gt;×2&lt;/b&gt; instancias&#10;&#10;HTTP :8080&#10;consume: evaluate&#10;gRPC → analysis, users&#10;DB: mysql-early-warning" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="480" y="280" width="200" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- data-analysis x2 (one shadow) -->
+        <mxCell id="s4_sh1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FAFAFA,#DBDBDB);strokeColor=light-dark(#000000,#999999);" vertex="1" parent="1"><mxGeometry x="703" y="287" width="200" height="170" as="geometry" /></mxCell>
+        <mxCell id="s4" value="&lt;b&gt;data-analysis&lt;/b&gt;&#10;&lt;b&gt;×2&lt;/b&gt; instancias&#10;&#10;HTTP :8080 · gRPC :50051&#10;gRPC → data-management&#10;(ReadingService, solo lectura)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="696" y="280" width="200" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- user-management x1 -->
+        <mxCell id="s5" value="&lt;b&gt;user-management&lt;/b&gt;&#10;&lt;b&gt;×1&lt;/b&gt; instancia&#10;&#10;HTTP :8080 · gRPC :9090&#10;DB: mysql-user-management" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="912" y="280" width="200" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- project-management x1 -->
+        <mxCell id="s6" value="&lt;b&gt;project-management&lt;/b&gt;&#10;&lt;b&gt;×1&lt;/b&gt; instancia&#10;&#10;HTTP :8080 · gRPC :9090&#10;DB: mysql-project-management" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="1128" y="280" width="200" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Shared messaging / cache ===== -->
+        <mxCell id="msg_band" value="Mensajería &amp; cache compartida (StatefulSets)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(transparent,#CC99FF);dashed=1;dashPattern=8 8;strokeColor=light-dark(#36393D,#B5739D);arcSize=8;verticalAlign=top;fontStyle=1;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="480" width="860" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="rabbit_c" value="RabbitMQ ×1&#10;exchange sensors.raw · colas: persist · evaluate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" vertex="1" parent="1">
+          <mxGeometry x="90" y="510" width="360" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="redis_c" value="Redis ×1&#10;buffer lecturas 24h · LRU" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" vertex="1" parent="1">
+          <mxGeometry x="500" y="510" width="360" height="42" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Discovery bar ===== -->
+        <mxCell id="dns_bar" value="Kubernetes DNS — service discovery (Service ClusterIP) · Consul deshabilitado" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#CCCCCC);strokeColor=light-dark(#000000,#666666);fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="600" width="1320" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Bottom centers ===== -->
+        <mxCell id="c_cfg" value="Configuración&#10;ConfigMaps + Sealed Secrets (overlay prod)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" vertex="1" parent="1">
+          <mxGeometry x="40" y="690" width="410" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="c_mon" value="Monitoreo&#10;Prometheus + node/mysqld-exporter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" vertex="1" parent="1">
+          <mxGeometry x="495" y="690" width="410" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="c_log" value="Logs&#10;stdout · kubectl logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" vertex="1" parent="1">
+          <mxGeometry x="950" y="690" width="410" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== EDGES ===================== -->
+        <!-- terminals -> gateway -->
+        <mxCell id="a_iot" value="TCP :5000 (ingest)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=1;entryX=0.15;entryY=0;endArrow=classic;" edge="1" parent="1" source="grp_iot" target="traefik_bar">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_user" value="HTTP" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=1;entryX=0.85;entryY=0;endArrow=classic;" edge="1" parent="1" source="grp_user" target="traefik_bar">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- gateway -> services -->
+        <mxCell id="a_s1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.1;exitY=1;entryX=0.5;entryY=0;endArrow=classic;" edge="1" parent="1" source="traefik_bar" target="s1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_s2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.26;exitY=1;entryX=0.5;entryY=0;endArrow=classic;" edge="1" parent="1" source="traefik_bar" target="s2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_s3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.42;exitY=1;entryX=0.5;entryY=0;endArrow=classic;" edge="1" parent="1" source="traefik_bar" target="s3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_s4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.58;exitY=1;entryX=0.5;entryY=0;endArrow=classic;" edge="1" parent="1" source="traefik_bar" target="s4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_s5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.74;exitY=1;entryX=0.5;entryY=0;endArrow=classic;" edge="1" parent="1" source="traefik_bar" target="s5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_s6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.9;exitY=1;entryX=0.5;entryY=0;endArrow=classic;" edge="1" parent="1" source="traefik_bar" target="s6"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- services <-> messaging -->
+        <mxCell id="a_pub" value="pub" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.25;exitY=1;entryX=0.15;entryY=0;endArrow=classic;fontSize=10;" edge="1" parent="1" source="s1" target="rabbit_c"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_persist" value="persist" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.4;exitY=1;entryX=0.5;entryY=0;endArrow=classic;fontSize=10;" edge="1" parent="1" source="s2" target="rabbit_c"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_eval" value="evaluate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.15;exitY=1;entryX=0.85;entryY=0;endArrow=classic;fontSize=10;" edge="1" parent="1" source="s3" target="rabbit_c"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_buf" value="buffer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;exitX=0.6;exitY=1;entryX=0.2;entryY=0;endArrow=classic;fontSize=10;" edge="1" parent="1" source="s1" target="redis_c"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="168" y="470" /><mxPoint x="572" y="470" /></Array></mxGeometry></mxCell>
+        <mxCell id="a_cache" value="cache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;exitX=0.6;exitY=1;entryX=0.8;entryY=0;endArrow=classic;fontSize=10;" edge="1" parent="1" source="s3" target="redis_c"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- services <-> discovery (representative) -->
+        <mxCell id="a_dns1" value="DNS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;exitX=0.5;exitY=1;entryX=0.9;entryY=0;endArrow=none;fontSize=10;strokeColor=light-dark(#000000,#999999);" edge="1" parent="1" source="redis_c" target="dns_bar"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_dns2" value="DNS discovery" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;endArrow=none;fontSize=10;strokeColor=light-dark(#000000,#999999);" edge="1" parent="1" source="s5" target="dns_bar"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- discovery/cluster -> bottom centers -->
+        <mxCell id="a_cfg" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.15;exitY=1;entryX=0.5;entryY=0;endArrow=classic;dashed=1;strokeColor=light-dark(#000000,#999999);" edge="1" parent="1" source="dns_bar" target="c_cfg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_mon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;endArrow=classic;dashed=1;strokeColor=light-dark(#000000,#999999);" edge="1" parent="1" source="dns_bar" target="c_mon"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a_log" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.85;exitY=1;entryX=0.5;entryY=0;endArrow=classic;dashed=1;strokeColor=light-dark(#000000,#999999);" edge="1" parent="1" source="dns_bar" target="c_log"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
