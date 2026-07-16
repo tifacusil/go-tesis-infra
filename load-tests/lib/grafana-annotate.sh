@@ -23,15 +23,46 @@
 # (comilla sin cerrar, etc.) NO debe abortar el script que llama vía `set -e`
 # — esta librería es de soporte, no debe poder tumbar una corrida de 12h por
 # un typo en un token.
+#
+# El "sin pisar" hay que implementarlo a mano: `source` con asignaciones planas
+# (SSH_HOST=...) sobreescribe SIEMPRE lo que ya esté exportado, y `set -a` solo
+# auto-exporta, no protege nada. Antes esto hacía que un `SSH_HOST=<B> ./chaos/x.sh`
+# del .env pisara el `SSH_HOST=<A>` pasado por línea de comando: los escenarios
+# apuntaban a B creyendo que apuntaban a A. Un chaos que inyecta en el servidor
+# equivocado es peor que uno que no corre, así que la precedencia correcta es
+# entorno explícito > .env.
 
 _grafana_annotate_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _grafana_annotate_env_file="$(cd "$_grafana_annotate_lib_dir/.." && pwd)/.env"
 if [[ -f "$_grafana_annotate_env_file" ]]; then
   if bash -n "$_grafana_annotate_env_file" 2>/dev/null; then
+    # Guarda el valor actual de cada clave del .env que YA venga del entorno,
+    # para restaurarla después de sourcear. Se guarda con `declare -p` (no
+    # concatenando) para no romper valores con `=`, espacios o saltos de línea.
+    _ga_saved_vars=()
+    while IFS= read -r _ga_line || [[ -n "$_ga_line" ]]; do
+      _ga_key="${_ga_line%%=*}"
+      # Recorta espacios y descarta comentarios / líneas sin clave válida.
+      _ga_key="${_ga_key#"${_ga_key%%[![:space:]]*}"}"
+      _ga_key="${_ga_key%"${_ga_key##*[![:space:]]}"}"
+      _ga_key="${_ga_key#export }"
+      [[ "$_ga_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+      # -v: la var está definida (aunque sea vacía) => vino del entorno y manda.
+      if [[ -v "$_ga_key" ]]; then
+        _ga_saved_vars+=("$(declare -p "$_ga_key")")
+      fi
+    done < "$_grafana_annotate_env_file"
+
     set -a
     # shellcheck source=/dev/null
     source "$_grafana_annotate_env_file"
     set +a
+
+    # Restaura las que ya venían del entorno: el .env solo aporta defaults.
+    for _ga_decl in ${_ga_saved_vars+"${_ga_saved_vars[@]}"}; do
+      eval "export ${_ga_decl#declare -* }"
+    done
+    unset _ga_saved_vars _ga_decl _ga_line _ga_key
   else
     echo "  (grafana-annotate: load-tests/.env tiene un error de sintaxis, se ignora — revisar comillas/caracteres especiales)" >&2
   fi
