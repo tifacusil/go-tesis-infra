@@ -10,17 +10,36 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/capture.sh"
+source "$SCRIPT_DIR/lib/gateway-tunnel.sh"
 source "$SCRIPT_DIR/../load-tests/lib/grafana-annotate.sh"
 
 TARGET_CONTAINER="data-management-1"
 DURATION="${1:-30}"
-GATEWAY_URL="${2:-http://localhost/api/v1/data/health}"
 LABEL="pause-data-management"
 
 if ! [[ "$DURATION" =~ ^[0-9]+$ ]]; then
   echo "ERROR: duration_seconds debe ser un entero, recibido: '$DURATION'" >&2
   exit 1
 fi
+
+# Resuelve GATEWAY_URL: argumento explícito > env > túnel SSH automático
+# (Sistema B: el :80 de Traefik no está expuesto al exterior, solo TCP 5000 —
+# ver lib/gateway-tunnel.sh) > default localhost (stack local).
+if ! resolve_gateway_url "${2:-}"; then
+  exit 1
+fi
+trap 'gateway_tunnel_cleanup' EXIT
+
+# Pre-check: si el health endpoint no responde 200 ANTES de inyectar el
+# fallo, todos los probes de abajo fallarían por un problema de alcance/URL
+# (no de blast radius) y la medición sería basura con aspecto de resultado.
+_pre_code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 5 "$GATEWAY_URL" || echo "000")
+if [[ "$_pre_code" != "200" ]]; then
+  echo "ERROR: pre-check del gateway falló (http_code=$_pre_code contra $GATEWAY_URL) — no se inyecta el fallo." >&2
+  echo "  Verificar GATEWAY_URL, o SSH_HOST/credenciales si se esperaba túnel automático." >&2
+  exit 1
+fi
+echo "Pre-check gateway OK (200): $GATEWAY_URL"
 
 echo "=== Escenario: pause $TARGET_CONTAINER (${DURATION}s) ==="
 
@@ -29,7 +48,9 @@ pre_snapshot=$(snapshot_counters "${LABEL}-pre")
 cat "$pre_snapshot"
 
 region_id=$(grafana_annotate_region_start "Chaos · pause-data-management (${DURATION}s)" "chaos" "pause-data-management")
-trap 'grafana_annotate_region_end "$region_id"' EXIT
+# Un solo trap EXIT: bash pisa el anterior, así que cierre de anotación y
+# cierre de túnel van juntos acá.
+trap 'grafana_annotate_region_end "$region_id"; gateway_tunnel_cleanup' EXIT
 
 echo ""
 echo "--- Pausando $TARGET_CONTAINER (pumba pause, SIGSTOP) por ${DURATION}s ---"

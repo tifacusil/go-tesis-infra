@@ -21,8 +21,14 @@
 #   cd tesis-infra
 #   TARGET_HOST=<host>:5000 SUSTAINED_RATE=<tasa-fase-1> SYSTEM=B \
 #     ./load-tests/run-endurance.sh &
-#   GATEWAY_URL=http://<host>/api/v1/data/health ./chaos/run-during-endurance.sh &
+#   ./chaos/run-during-endurance.sh &   # GATEWAY_URL opcional — ver abajo
 #   wait
+#
+# GATEWAY_URL: setearlo solo si el gateway HTTP es alcanzable directo (Sistema
+# A). Para Sistema B (Traefik :80 no expuesto, solo TCP 5000 hacia afuera),
+# dejarlo sin setear y tener SSH_HOST/SSH_USER + SSH_KEY_PATH|SSH_PASSWORD en
+# load-tests/.env: pause-data-management.sh abre un túnel SSH automático al
+# :80 del server para el sondeo — ver chaos/lib/gateway-tunnel.sh.
 #
 # Requiere Docker (Pumba) y Prometheus accesibles, igual que cada script
 # individual (ver chaos/README.md). Los resultados de cada inyección van a
@@ -39,7 +45,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GATEWAY_URL="${GATEWAY_URL:-http://localhost/api/v1/data/health}"
+# Sin default acá: se pasa vacío y pause-data-management.sh resuelve solo
+# (GATEWAY_URL explícito > túnel SSH automático si SSH_HOST está seteado >
+# localhost del stack local) — ver chaos/lib/gateway-tunnel.sh.
+GATEWAY_URL="${GATEWAY_URL:-}"
 
 # Offsets en segundos desde el inicio de esta corrida.
 OFFSET_KILL_RABBITMQ=$((2 * 3600))
