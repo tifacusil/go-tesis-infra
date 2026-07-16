@@ -26,6 +26,14 @@ set -euo pipefail
 
 TARGET_HOST="${TARGET_HOST:?Falta TARGET_HOST. Ej: TARGET_HOST=192.168.1.X:5000 ./run-endurance.sh}"
 SUSTAINED_RATE="${SUSTAINED_RATE:?Falta SUSTAINED_RATE (tasa máxima hallada en Fase 1). Ej: SUSTAINED_RATE=100 ./run-endurance.sh}"
+
+# Debe ser un entero: Artillery lo interpola en arrivalRate/rampTo y el engine
+# lo usa como tamaño del pool — un valor no numérico recién explotaría (o peor,
+# degradaría silenciosamente el pool a 50) después del reset y las anotaciones.
+if ! [[ "$SUSTAINED_RATE" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: SUSTAINED_RATE='$SUSTAINED_RATE' no es un entero positivo (ej: SUSTAINED_RATE=100)." >&2
+  exit 1
+fi
 SYSTEM="${SYSTEM:-A}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/results/$SYSTEM"
@@ -51,6 +59,14 @@ fi
 
 mkdir -p "$RESULTS_DIR"
 
+# Nunca pisar el resultado de una corrida de 12h anterior — es un dato de
+# tesis irrecuperable. Se mueve a un .bak con timestamp en vez de sobrescribir.
+if [[ -f "$OUTPUT" ]]; then
+  _backup="$OUTPUT.$(date +%Y%m%d-%H%M%S).bak"
+  mv "$OUTPUT" "$_backup"
+  echo "AVISO: ya existía $OUTPUT — movido a $_backup"
+fi
+
 echo "=== Artillery endurance test (12h) — Sistema $SYSTEM ==="
 echo "    Target:         $TARGET_HOST"
 echo "    Tasa sostenida: ${SUSTAINED_RATE} req/s"
@@ -59,6 +75,10 @@ echo "    Resultado:      $OUTPUT"
 echo ""
 echo "    Corrida inicia [$(date '+%Y-%m-%d %H:%M:%S')], termina ~$(date -d '+12 hours 3 minutes' '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo '(+12h 3min)')"
 echo "    Monitorear en paralelo: Grafana (throughput/latencia/CPU/mem), colas RabbitMQ, backlog Redis."
+echo ""
+echo "    IMPORTANTE (Windows/laptop): deshabilitar suspensión antes de arrancar, o la"
+echo "    corrida se congela al dormir la máquina:  powercfg /change standby-timeout-ac 0"
+echo "                                              powercfg /change monitor-timeout-ac 10"
 echo ""
 
 "$SCRIPT_DIR/reset-state.sh" || echo "AVISO: reset-state falló, la corrida de 12h puede arrancar con estado residual (Redis backlog / alerts) de una corrida anterior." >&2

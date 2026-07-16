@@ -1,0 +1,245 @@
+<mxfile host="Electron" agent="claude-code">
+  <diagram id="k3s-arch-landslide" name="Arquitectura k3s">
+    <mxGraphModel dx="1140" dy="580" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1240" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontStyle=1;fontSize=16;" value="Sistema de monitoreo de deslizamientos — Orquestación k3s (Sistema B)" vertex="1">
+          <mxGeometry height="30" width="900" x="40" y="18" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_cluster" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#F9F7ED, #085041);dashed=1;dashPattern=8 8;strokeColor=light-dark(#36393D,#99FFCC);arcSize=4;verticalAlign=top;fontStyle=1;fontSize=13;" value="k3s cluster · namespace: landslide" vertex="1">
+          <mxGeometry height="1075" width="1840" x="30" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_svc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#F9F7ED,#FFB366);dashed=1;dashPattern=8 8;strokeColor=light-dark(#000000,#FF8000);arcSize=8;verticalAlign=top;fontStyle=1;" value="Microservicios · Deployments (Service ClusterIP · Traefik strategy p2c)" vertex="1">
+          <mxGeometry height="700" width="430" x="70" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_infra" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#F9F7ED,#CC99FF);dashed=1;dashPattern=8 8;strokeColor=light-dark(#36393D,#B5739D);arcSize=8;verticalAlign=top;fontStyle=1;" value="Infraestructura · StatefulSets (PVC local-path) — database-per-service" vertex="1">
+          <mxGeometry height="700" width="610" x="1230" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_cfg" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(transparent,#FFE599);dashed=1;dashPattern=8 8;strokeColor=light-dark(#000000,#999999);arcSize=8;verticalAlign=top;fontStyle=1;" value="Configuración / Secrets" vertex="1">
+          <mxGeometry height="150" width="430" x="70" y="1055" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_obs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(transparent,#FFE599);dashed=1;dashPattern=8 8;strokeColor=light-dark(#000000,#999999);arcSize=8;verticalAlign=top;fontStyle=1;" value="Observabilidad" vertex="1">
+          <mxGeometry height="150" width="610" x="1230" y="1055" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_sensors" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="Sensores DTU" vertex="1">
+          <mxGeometry height="66" width="220" x="70" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_client" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="Cliente REST&#xa;HTTP /api/v1/*" vertex="1">
+          <mxGeometry height="66" width="220" x="1560" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="traefik" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#CCCCCC);strokeColor=light-dark(#000000,#666666);fontStyle=1;" value="Traefik (k3s built-in) — API Gateway&#xa;IngressRoute · PathPrefix + stripPrefix · strategy p2c&#xa;/receiving · /data · /analysis · /warnings · /users · /projects" vertex="1">
+          <mxGeometry height="65" width="520" x="520" y="205" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_recv" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="data-receiving ×3&#xa;TCP :5000 · HTTP :8080" vertex="1">
+          <mxGeometry height="72" width="300" x="140" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_mgmt" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="data-management ×2&#xa;HTTP :8080 · gRPC :9090 (ReadingService)" vertex="1">
+          <mxGeometry height="72" width="300" x="140" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_anal" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="data-analysis ×2&#xa;HTTP :8080 · gRPC :50051" vertex="1">
+          <mxGeometry height="72" width="300" x="140" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_ew" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="early-warning ×2&#xa;HTTP :8080" vertex="1">
+          <mxGeometry height="72" width="300" x="140" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_user" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="user-management ×1&#xa;HTTP :8080 · gRPC :9090" vertex="1">
+          <mxGeometry height="72" width="300" x="140" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_proj" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="project-management ×1&#xa;HTTP :8080 · gRPC :9090" vertex="1">
+          <mxGeometry height="72" width="300" x="140" y="930" as="geometry" />
+        </mxCell>
+        <mxCell id="inf_rabbit" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="RabbitMQ ×1&#xa;exchange sensors.raw · queues: data_management.persist · early_warning.evaluate" vertex="1">
+          <mxGeometry height="72" width="470" x="1300" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="my_mgmt" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="mysql-data-management&#xa;db: data_management" vertex="1">
+          <mxGeometry height="72" width="470" x="1300" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="inf_redis" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="Redis ×1&#xa;buffer lecturas 24h · AOF · maxmemory 128mb LRU" vertex="1">
+          <mxGeometry height="72" width="470" x="1300" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="my_ew" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="mysql-early-warning&#xa;db: early_warning" vertex="1">
+          <mxGeometry height="72" width="470" x="1300" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="my_user" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="mysql-user-management&#xa;db: user_management" vertex="1">
+          <mxGeometry height="72" width="470" x="1300" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="my_proj" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="mysql-project-management&#xa;db: project_management" vertex="1">
+          <mxGeometry height="72" width="470" x="1300" y="930" as="geometry" />
+        </mxCell>
+        <mxCell id="cfg_config" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="ConfigMaps&#xa;(hosts, puertos, colas)" vertex="1">
+          <mxGeometry height="52" width="180" x="100" y="1098" as="geometry" />
+        </mxCell>
+        <mxCell id="cfg_sealed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="Sealed Secrets&#xa;(overlay prod)" vertex="1">
+          <mxGeometry height="52" width="180" x="300" y="1098" as="geometry" />
+        </mxCell>
+        <mxCell id="cfg_note" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=2;fontSize=11;" value="imagePullSecret: ghcr (ghcr.io/tifacusil/*) · Kustomize base + overlays/{local,prod} · discovery por DNS de Service K8s (Consul off)" vertex="1">
+          <mxGeometry height="40" width="400" x="90" y="1158" as="geometry" />
+        </mxCell>
+        <mxCell id="obs_prom" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="Prometheus&#xa;scrape /metrics" vertex="1">
+          <mxGeometry height="56" width="180" x="1250" y="1098" as="geometry" />
+        </mxCell>
+        <mxCell id="obs_node" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="node-exporter&#xa;(DaemonSet)" vertex="1">
+          <mxGeometry height="56" width="170" x="1500" y="1098" as="geometry" />
+        </mxCell>
+        <mxCell id="obs_mysqlexp" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#E6E6E6);strokeColor=light-dark(#000000,#666666);" value="mysqld-exporter" vertex="1">
+          <mxGeometry height="56" width="130" x="1690" y="1098" as="geometry" />
+        </mxCell>
+        <mxCell id="obs_note" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=2;fontSize=11;" value="Prometheus scrapea /metrics de todos los Services y de los exporters" vertex="1">
+          <mxGeometry height="30" width="530" x="1290" y="1158" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sensors" edge="1" parent="1" source="ext_sensors" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" target="svc_recv" value="TCP :5000">
+          <mxGeometry relative="1" x="-0.1294" y="10" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="60" y="88" />
+              <mxPoint x="60" y="416" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_client" edge="1" parent="1" source="ext_client" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" target="traefik" value="HTTP /api/v1/*">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1670" y="180" />
+              <mxPoint x="910" y="180" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ing" edge="1" parent="1" source="traefik" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="grp_svc" value="HTTP → Service (path routing)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="676" y="300" />
+              <mxPoint x="285" y="300" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_recv_rabbit" edge="1" parent="1" source="svc_recv" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="inf_rabbit" value="publish sensors.raw">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mgmt_mymgmt" edge="1" parent="1" source="svc_mgmt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="my_mgmt" value="SQL">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ew_myew" edge="1" parent="1" source="svc_ew" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="my_ew" value="SQL">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_user_myuser" edge="1" parent="1" source="svc_user" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="my_user" value="SQL">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_proj_myproj" edge="1" parent="1" source="svc_proj" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="my_proj" value="SQL">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_rabbit_mgmt" edge="1" parent="1" source="inf_rabbit" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.25;exitDx=0;exitDy=0;" value="consume persist">
+          <mxGeometry relative="1" x="-0.3374" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1300" y="430" />
+              <mxPoint x="820" y="430" />
+              <mxPoint x="820" y="510" />
+              <mxPoint x="440" y="510" />
+            </Array>
+            <mxPoint x="440" y="510" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_rabbit_ew" edge="1" parent="1" source="inf_rabbit" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=1;entryY=0.25;entryDx=0;entryDy=0;" target="svc_ew" value="consume evaluate">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1300" y="444" />
+              <mxPoint x="840" y="444" />
+              <mxPoint x="840" y="728" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_recv_redis" edge="1" parent="1" source="svc_recv" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;" target="inf_redis" value="buffer 24h">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="680" y="434" />
+              <mxPoint x="680" y="618" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ew_redis" edge="1" parent="1" source="svc_ew" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" target="inf_redis" value="cache">
+          <mxGeometry relative="1" x="-0.0722" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="600" y="764" />
+              <mxPoint x="600" y="654" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_anal_mgmt" edge="1" parent="1" source="svc_anal" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.6;entryDx=0;entryDy=0;fontSize=10;" target="svc_mgmt" value="gRPC :9090 ReadingService">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="108" y="636" />
+              <mxPoint x="108" y="533" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ew_anal" edge="1" parent="1" source="svc_ew" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;fontSize=10;" target="svc_anal" value="gRPC :50051">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="110" y="732" />
+              <mxPoint x="110" y="654" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ew_user" edge="1" parent="1" source="svc_ew" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;fontSize=10;" target="svc_user" value="gRPC :9090">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="108" y="760" />
+              <mxPoint x="108" y="842" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_prom_node" edge="1" parent="1" source="obs_prom" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=light-dark(#000000,#999999);exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=10;" target="obs_node" value="scrape">
+          <mxGeometry relative="1" x="-0.0071" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_prom_mysqlexp" edge="1" parent="1" source="obs_prom" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=light-dark(#000000,#999999);entryX=0.5;entryY=1;entryDx=0;entryDy=0;fontSize=10;" target="obs_mysqlexp" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1350" y="1182" />
+              <mxPoint x="1755" y="1182" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_mysqlexp_infra" edge="1" parent="1" source="obs_mysqlexp" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=light-dark(#000000,#999999);fontSize=10;" value="MySQL /metrics">
+          <mxGeometry relative="1" x="-0.1767" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1760" y="1030" />
+            </Array>
+            <mxPoint x="1760" y="1030" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="zrrjzR9f5iu5o9gOnNxU-2" connectable="0" parent="1" style="group" value="" vertex="1">
+          <mxGeometry height="70" width="330" x="690" y="1100" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_box" parent="zrrjzR9f5iu5o9gOnNxU-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=light-dark(#000000,#999999);dashed=1;dashPattern=4 4;" value="" vertex="1">
+          <mxGeometry height="70" width="330" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_t" parent="zrrjzR9f5iu5o9gOnNxU-2" style="text;html=1;align=left;fontStyle=1;fontSize=11;" value="Leyenda" vertex="1">
+          <mxGeometry height="18" width="120" x="10" y="4" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_solid_a" edge="1" parent="zrrjzR9f5iu5o9gOnNxU-2" style="endArrow=classic;html=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="15" y="38" as="sourcePoint" />
+            <mxPoint x="65" y="38" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_solid_l" parent="zrrjzR9f5iu5o9gOnNxU-2" style="text;html=1;align=left;fontSize=10;" value="sync: HTTP · gRPC · cola" vertex="1">
+          <mxGeometry height="18" width="250" x="72" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_dash_a" edge="1" parent="zrrjzR9f5iu5o9gOnNxU-2" style="endArrow=classic;html=1;dashed=1;strokeColor=light-dark(#000000,#999999);" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="15" y="58" as="sourcePoint" />
+            <mxPoint x="65" y="58" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_dash_l" parent="zrrjzR9f5iu5o9gOnNxU-2" style="text;html=1;align=left;fontSize=10;" value="cache / buffer · métricas" vertex="1">
+          <mxGeometry height="18" width="250" x="72" y="44" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

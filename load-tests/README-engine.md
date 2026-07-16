@@ -31,9 +31,19 @@ request that produced them without needing request IDs.
 If a worker process dies unexpectedly (crash, connection reset the transport
 couldn't recover from with `--no-retry`), the engine detects the exit, fails
 any requests that were in flight on that worker, and transparently respawns
-it — logged to stderr as `[dtu-tcp] ... is down (...) — respawning`. All pool
-workers are killed on process exit / SIGINT / SIGTERM so a run never leaves
-orphaned Python processes or open connections behind.
+it after a 1s breather (so a crash-on-start bug can't become a tight spawn
+storm) — logged to stderr as `[dtu-tcp] ... is down (...) — respawning`. All
+pool workers are killed on process exit / SIGINT / SIGTERM so a run never
+leaves orphaned Python processes or open connections behind.
+
+Every dispatched `send` also carries a client-side timeout
+(`DTU_ENGINE_SEND_TIMEOUT_MS`, default 120000): if a request sits queued +
+in flight on a worker longer than that, its VU fails with
+`pool_dispatch_failed` instead of waiting forever. The Python worker already
+bounds each network operation at 5s, so this never fires in a healthy run —
+it exists because Artillery only exits once every VU has completed, and a
+single wedged worker without this ceiling would leave the run (e.g. the 12h
+endurance one) hanging indefinitely after its phases finish.
 
 **Why shell out instead of building frames in JS:** dtu-emulator is the
 canonical, contract-validated frame encoder (`src/sender/frame.py`,
