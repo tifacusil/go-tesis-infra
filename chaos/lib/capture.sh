@@ -3,8 +3,11 @@
 # Prometheus (instant query) y guarda snapshots crudos para el analisis MTTR /
 # mensajes perdidos / blast radius.
 #
-# PROMETHEUS_ADDR (default http://localhost:9090) debe apuntar al Prometheus
-# de local/infra/docker-compose.observability.yml.
+# PROMETHEUS_ADDR debe apuntar al Prometheus del sistema bajo prueba. Si no
+# está seteado, se resuelve desde SYSTEM (A/B, las direcciones conocidas de
+# cada sistema de la tesis); solo sin ambos cae al localhost:9090 del stack
+# local de observabilidad (local/infra/docker-compose.observability.yml) —
+# que NO es donde viven las métricas de una corrida real contra el servidor.
 #
 # Nota: este archivo NO fija `set -euo pipefail` — depende del script que lo
 # fuente. `prom_query` se usa casi siempre dentro de `state=$(prom_query ...)`
@@ -14,7 +17,21 @@
 # valida explícitamente el intérprete antes de usarlo, en vez de confiar en
 # que `set -e` capture el problema.
 
-PROMETHEUS_ADDR="${PROMETHEUS_ADDR:-http://localhost:9090}"
+# Resolución de PROMETHEUS_ADDR: explícito > por sistema (SYSTEM=A/B) >
+# localhost. Las métricas de chaos (data_receiving_messages_published_total,
+# ew_circuit_breaker_state, ew_alerts_published_total) están confirmadas en
+# ambos Prometheus.
+if [[ -z "${PROMETHEUS_ADDR:-}" ]]; then
+  case "${SYSTEM:-}" in
+    A) PROMETHEUS_ADDR="http://204.168.203.32:9090" ;;
+    B) PROMETHEUS_ADDR="http://178.105.104.95:31083" ;;
+    "") PROMETHEUS_ADDR="http://localhost:9090"
+        echo "  (capture: ni PROMETHEUS_ADDR ni SYSTEM seteados — usando $PROMETHEUS_ADDR, que solo sirve para el stack local. Para una corrida real: export SYSTEM=A|B o PROMETHEUS_ADDR=http://<host>:<puerto>)" >&2 ;;
+    *) PROMETHEUS_ADDR="http://localhost:9090"
+       echo "  (capture: SYSTEM='$SYSTEM' desconocido (esperado A o B) — usando $PROMETHEUS_ADDR)" >&2 ;;
+  esac
+fi
+echo "  (capture: PROMETHEUS_ADDR=$PROMETHEUS_ADDR)" >&2
 RESULTS_DIR="${RESULTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/results}"
 mkdir -p "$RESULTS_DIR"
 
