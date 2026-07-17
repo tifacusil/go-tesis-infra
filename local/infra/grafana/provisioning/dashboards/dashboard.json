@@ -1911,6 +1911,261 @@
       ],
       "title": "Sist A - data-receiving: duracion procesamiento frame p50-p99 (s)",
       "type": "timeseries"
+    },
+    {
+      "id": 17,
+      "type": "state-timeline",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "Sist B - Circuit breaker: estado (EW -> data-analysis)",
+      "description": "Estado del breaker de Early Warning hacia data-analysis (CLAUDE.md 2.3). 0=closed 1=open 2=half_open.\n\nOJO al leer huecos: ew_circuit_breaker_state es un GaugeVec y su unico setter esta en el path de /reports/generate. Los hijos de un GaugeVec se crean lazy, asi que la serie NO EXISTE hasta que llega el primer request de reporte. Un hueco aca significa 'nadie pidio un reporte', NO 'el breaker estaba sano'. La carga de endurance solo empuja frames por TCP y nunca toca ese path: durante una corrida limpia este panel queda vacio salvo en las ventanas de chaos, que generan trafico de reportes.\n\nEl Sistema A no tiene panel equivalente porque no tiene circuit breaker: esa ausencia es el resultado a comparar, no un panel faltante.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "spanNulls": false,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "closed",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "open",
+                  "color": "red",
+                  "index": 1
+                },
+                "2": {
+                  "text": "half_open",
+                  "color": "orange",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "alignValue": "left",
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "showValue": "auto",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "ew_circuit_breaker_state",
+          "legendFormat": "{{target}}",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "Sist B - Continuidad operativa: alertas vs breaker",
+      "description": "Evidencia de CLAUDE.md 2.3: con el circuito ABIERTO, Early Warning debe seguir emitiendo alarmas por umbral simple (degradacion, no corte). Si 'alertas/s' cae a 0 mientras 'breaker' vale 1, la continuidad operativa NO se cumple.\n\nEl breaker se dibuja en el eje derecho con la misma escala 0/1/2 del panel de al lado. Vale la misma advertencia: sin trafico de reportes la serie del breaker no existe.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "breaker (0/1/2)"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 20
+              },
+              {
+                "id": "max",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "closed",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "open",
+                        "color": "red",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "half_open",
+                        "color": "orange",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(ew_alerts_published_total[1m]))",
+          "legendFormat": "alertas/s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "max(ew_circuit_breaker_state{target=\"data-analysis\"})",
+          "legendFormat": "breaker (0/1/2)",
+          "range": true,
+          "refId": "B"
+        }
+      ]
     }
   ],
   "preload": false,
