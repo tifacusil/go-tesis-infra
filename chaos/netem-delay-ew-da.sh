@@ -61,6 +61,30 @@ DA_TIMEOUT_MS="${DATA_ANALYSIS_TIMEOUT_MS:-5000}"
 FAIL_THRESHOLD="${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-5}"
 DA_CONTAINER_NAME="${DA_CONTAINER_NAME:-data-analysis}"
 NETEM_IFACE="${NETEM_IFACE:-eth0}"
+DA_GRPC_PORT="${DA_GRPC_PORT:-50051}"
+
+# NETEM_SCOPE — QUÉ fallo se modela. No es un detalle de implementación: cambia
+# qué mide el escenario, y los dos son válidos pero distintos.
+#
+#   grpc (default): delay SOLO al tráfico que sale del puerto gRPC (50051), o
+#     sea las respuestas a Early Warning. Modela "el path ew->da está degradado,
+#     data-analysis sano". Las probes de kubelet (HTTP :8080) NO se tocan, así
+#     que el pod sigue Ready y el breaker abre por LATENCIA, con el peer vivo.
+#     Es el único escenario que mide para qué existe un circuit breaker (§2.3):
+#     degradar a umbral simple mientras el peer responde lento.
+#
+#   all: delay a TODO el egress del pod. Modela "la red del pod está degradada"
+#     (NIC/CNI saturada, vecino ruidoso). Es un fallo real, pero como el delay
+#     también pega a las respuestas de las probes (kubelet las corta a 5s),
+#     kubelet mata el contenedor a los ~45s por liveness. Entonces el breaker
+#     abre porque el peer se cayó — que es lo mismo que ya mide
+#     pause-data-management. El escenario colapsa sobre el otro y el "abrió a
+#     los 73s" mezcla latencia con peer caído: no es un dato limpio.
+#
+# Con scope=all es IMPOSIBLE separarlos: el timeout de la probe (5s) y el
+# timeout gRPC del breaker (5s) son el mismo umbral, así que cualquier delay que
+# abra el breaker mata al pod. Por eso el default es grpc.
+NETEM_SCOPE="${NETEM_SCOPE:-grpc}"
 
 # Driver de reportes: sin esto el breaker nunca se ejercita y la serie del gauge
 # ni siquiera existe (ver punto 3 arriba).
@@ -70,6 +94,15 @@ REPORT_CONCURRENCY="${REPORT_CONCURRENCY:-5}"
 REPORT_TIMEOUT="${REPORT_TIMEOUT:-60}"
 
 _ssh_require
+
+case "$NETEM_SCOPE" in
+  grpc|all) ;;
+  *)
+    echo "ERROR: NETEM_SCOPE='$NETEM_SCOPE' inválido — usar 'grpc' (path ew->da degradado, peer sano)" >&2
+    echo "  o 'all' (red del pod degradada; kubelet mata el pod y el escenario mide lo mismo que pause)." >&2
+    exit 1
+    ;;
+esac
 
 if [[ "$SSH_ORCHESTRATOR" != "k8s" ]]; then
   echo "ERROR: este escenario solo está implementado para el Sistema B (SSH_ORCHESTRATOR=k8s)." >&2
@@ -98,6 +131,16 @@ echo "=== Escenario: netem delay ${DELAY_MS}ms en $DA_CONTAINER_NAME (Sistema B 
 echo "    Servidor:      $SSH_USER@$SSH_HOST (namespace $K8S_NAMESPACE)"
 echo "    Delay:         ${DELAY_MS}ms  (timeout por llamada: ${DA_TIMEOUT_MS}ms => cada intento corta)"
 echo "    Duración:      ${DURATION}s"
+if [[ "$NETEM_SCOPE" == "grpc" ]]; then
+  echo "    Scope:         grpc — solo el puerto $DA_GRPC_PORT (respuestas a EW). Las probes de"
+  echo "                   kubelet no se tocan: data-analysis sigue vivo y el breaker abre por"
+  echo "                   LATENCIA, con el peer respondiendo lento."
+else
+  echo "    Scope:         all — TODO el egress del pod. AVISO: el delay también pega a las probes"
+  echo "                   de kubelet (timeout 5s), así que data-analysis morirá por liveness a los"
+  echo "                   ~45s y el breaker abrirá por peer caído, no por latencia. Mide lo mismo"
+  echo "                   que pause-data-management; el número no es un dato limpio de latencia."
+fi
 echo "    Driver:        POST http://${EW_SVC}/reports/generate (project_id=${REPORT_PROJECT}, x${REPORT_CONCURRENCY})"
 
 # _da_targets — imprime "<host_pid> <pod_ip>" por cada contenedor data-analysis.
@@ -263,10 +306,26 @@ echo "--- Arrancando driver de reportes (ejercita el breaker y crea la serie del
 _driver &
 driver_pid=$!
 
-echo "--- Inyectando latencia (tc netem delay ${DELAY_MS}ms) en ${#injected_pids[@]} pod(s) ---"
+echo "--- Inyectando latencia (tc netem delay ${DELAY_MS}ms, scope=$NETEM_SCOPE) en ${#injected_pids[@]} pod(s) ---"
 fail_start=$(date +%s)
 for pid in "${injected_pids[@]}"; do
-  if ! _sudo_run "nsenter -t $pid -n tc qdisc add dev $NETEM_IFACE root netem delay ${DELAY_MS}ms" >/dev/null 2>&1; then
+  if [[ "$NETEM_SCOPE" == "all" ]]; then
+    inject_cmd="nsenter -t $pid -n tc qdisc add dev $NETEM_IFACE root netem delay ${DELAY_MS}ms"
+  else
+    # prio con priomap todo-ceros: TODO el tráfico por defecto (incluidas las
+    # respuestas a las probes de kubelet en :8080) cae en la banda 1:1, que no
+    # tiene netem. Solo lo que matchea el filtro va a 1:4, que sí lo tiene.
+    # Sin el priomap explícito, el default reparte por TOS y parte del tráfico
+    # caería en la banda con delay — degradando las probes sin querer, que es
+    # justo lo que este scope evita.
+    # match ip sport 50051 = paquetes que SALEN del servidor gRPC, o sea las
+    # respuestas a Early Warning. El request de ida no se toca: alcanza con
+    # demorar una pata para que el RTT supere el timeout.
+    inject_cmd="nsenter -t $pid -n tc qdisc add dev $NETEM_IFACE root handle 1: prio bands 4 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 && \
+nsenter -t $pid -n tc qdisc add dev $NETEM_IFACE parent 1:4 handle 40: netem delay ${DELAY_MS}ms && \
+nsenter -t $pid -n tc filter add dev $NETEM_IFACE protocol ip parent 1: prio 1 u32 match ip sport $DA_GRPC_PORT 0xffff flowid 1:4"
+  fi
+  if ! _sudo_run "$inject_cmd" >/dev/null 2>&1; then
     echo "ERROR: falló 'tc qdisc add' en el netns del pid $pid — la latencia NO fue inyectada." >&2
     exit 1
   fi
