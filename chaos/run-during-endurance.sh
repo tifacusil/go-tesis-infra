@@ -49,6 +49,28 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/capture.sh"
 source "$SCRIPT_DIR/lib/ssh.sh"
+source "$SCRIPT_DIR/../load-tests/lib/grafana-annotate.sh"
+
+# ── Vigilancia de conectividad ───────────────────────────────────────────────
+# El generador de carga corre en esta máquina y el sistema bajo prueba está del
+# otro lado de Internet. Un corte de red deja un agujero en los datos que, desde
+# Grafana, se ve IGUAL que si el sistema hubiera dejado de procesar: throughput
+# a cero. Sin evidencia de que fue la red, ese tramo se lee como una falla del
+# sistema y contamina la conclusión.
+#
+# No es hipotético: el 2026-07-16 el Sistema A quedó inalcanzable 26 minutos
+# (20:20 -> 20:46 UTC) con el host perfectamente vivo — sshd aceptando
+# conexiones de otros, ningún servicio reiniciado, ningún reboot. Simplemente el
+# tráfico desde acá no llegaba.
+#
+# Este watcher no puede evitar el corte, pero deja constancia: anota la ventana
+# en Grafana y la escribe a un log, para poder excluir el tramo del análisis en
+# vez de discutir si el sistema se cayó.
+CONN_PROBE_INTERVAL="${CONN_PROBE_INTERVAL:-15}"
+CONN_PROBE_TIMEOUT="${CONN_PROBE_TIMEOUT:-8}"
+# 3 fallos (~45s) antes de declarar corte: un timeout suelto es ruido normal de
+# Internet y no merece una anotación.
+CONN_FAIL_THRESHOLD="${CONN_FAIL_THRESHOLD:-3}"
 
 # Offsets en segundos desde el inicio de esta corrida. Overridables para poder
 # probar el orquestador sin esperar 12h (ej. OFFSET_KILL_RABBITMQ=5).
@@ -73,8 +95,8 @@ skipped=0
 
 _ssh_require
 case "${SSH_ORCHESTRATOR:-}" in
-  native) SYSTEM_TAG="Sistema A (systemd nativo)" ;;
-  k8s)    SYSTEM_TAG="Sistema B (k3s)" ;;
+  native) SYSTEM_TAG="Sistema A (systemd nativo)"; SYSTEM_TAG_SHORT="sistema-A" ;;
+  k8s)    SYSTEM_TAG="Sistema B (k3s)";            SYSTEM_TAG_SHORT="sistema-B" ;;
   *)
     echo "ERROR: SSH_ORCHESTRATOR es obligatorio — 'native' (Sistema A) o 'k8s' (Sistema B)." >&2
     echo "  Define contra qué sistema se inyecta y cómo. Sin esto el orquestador no sabe si el" >&2
@@ -137,10 +159,13 @@ if [[ "$preflight_errors" -gt 0 ]]; then
   exit 1
 fi
 
+CONN_LOG="$RESULTS_DIR/connectivity-$(date +%s).log"
+
 echo ""
 echo "=== Orquestador de chaos durante endurance (12h) ==="
 echo "    Inicio:  $(date '+%Y-%m-%d %H:%M:%S')"
 echo "    Destino: $SYSTEM_TAG — $SSH_USER@$SSH_HOST"
+echo "    Conectividad: sondeando ${TARGET_HOST:-$gw_url} cada ${CONN_PROBE_INTERVAL}s -> $CONN_LOG"
 echo "    Plan:    t+$((OFFSET_KILL_RABBITMQ / 60))min kill-rabbitmq"
 echo "             t+$((OFFSET_PAUSE_DATA_MGMT / 60))min pause-data-management ${PAUSE_DURATION}s"
 if [[ "$SSH_ORCHESTRATOR" == "k8s" ]]; then
@@ -149,6 +174,54 @@ else
   echo "             (netem-delay-ew-da: se saltea — el Sistema A no tiene circuit breaker que medir)"
 fi
 echo ""
+
+# _conn_probe — ¿está vivo el camino desde ACÁ hasta el sistema bajo prueba?
+# Si TARGET_HOST está seteado se prueba TCP contra el puerto de ingesta real —
+# exactamente el camino que usa la carga. Si no, se cae al gateway HTTP, que
+# vive en el mismo host y sirve igual para detectar un corte de red.
+_conn_probe() {
+  if [[ -n "${TARGET_HOST:-}" ]]; then
+    local h="${TARGET_HOST%%:*}" p="${TARGET_HOST##*:}"
+    [[ "$p" == "$h" ]] && p=80
+    timeout "$CONN_PROBE_TIMEOUT" bash -c "(echo >/dev/tcp/$h/$p)" >/dev/null 2>&1
+  else
+    curl -s -o /dev/null --max-time "$CONN_PROBE_TIMEOUT" "$gw_url" >/dev/null 2>&1
+  fi
+}
+
+# _connectivity_watch — corre en background toda la corrida. Cierra su propia
+# región por trap: si el orquestador muere con un corte abierto, una anotación
+# sin fin queda para siempre en el dashboard.
+_connectivity_watch() {
+  local fails=0 region="" lost_at=0 probe_desc
+  probe_desc="${TARGET_HOST:-$gw_url}"
+  trap '[[ -n "$region" ]] && grafana_annotate_region_end "$region"; exit 0' EXIT INT TERM
+
+  while :; do
+    if _conn_probe; then
+      if [[ -n "$region" ]]; then
+        local dur=$(( $(date +%s) - lost_at ))
+        grafana_annotate_region_end "$region"
+        # tee al log ademas de stdout: si la corrida de 12h se analiza despues,
+        # el log es la fuente de verdad de que tramos hay que excluir.
+        echo "[conn] $(date '+%Y-%m-%d %H:%M:%S') RECUPERADA tras ${dur}s ($probe_desc)" | tee -a "$CONN_LOG"
+        region=""
+      fi
+      fails=0
+    else
+      fails=$((fails + 1))
+      if [[ "$fails" -eq "$CONN_FAIL_THRESHOLD" && -z "$region" ]]; then
+        lost_at=$(date +%s)
+        echo "[conn] $(date '+%Y-%m-%d %H:%M:%S') PERDIDA tras $fails fallos ($probe_desc)" | tee -a "$CONN_LOG"
+        echo "  El sistema puede estar sano: esto mide el camino de red desde ESTA máquina." >&2
+        region=$(grafana_annotate_region_start \
+          "Conectividad perdida con $probe_desc (desde el generador de carga)" \
+          "conectividad" "$SYSTEM_TAG_SHORT")
+      fi
+    fi
+    sleep "$CONN_PROBE_INTERVAL"
+  done
+}
 
 wait_until_offset() {
   local target_offset="$1"
@@ -171,6 +244,16 @@ run_injection() {
     failures=$((failures + 1))
   fi
 }
+
+# El watcher se arranca ACÁ, después de las definiciones: bash necesita la
+# función declarada antes de invocarla, y arrancándolo arriba fallaba con
+# "_connectivity_watch: command not found" — en background y sin abortar nada,
+# así que la corrida seguía sin vigilancia y el fallo pasaba desapercibido.
+_connectivity_watch &
+conn_watch_pid=$!
+# El watcher es un proceso aparte: si el orquestador termina (bien o mal) hay que
+# matarlo, o queda vivo en background hasta que alguien cierre la terminal.
+trap 'kill "$conn_watch_pid" 2>/dev/null; wait "$conn_watch_pid" 2>/dev/null' EXIT INT TERM
 
 wait_until_offset "$OFFSET_KILL_RABBITMQ"
 echo "--- [t+$((OFFSET_KILL_RABBITMQ / 60))min] kill-rabbitmq.sh ---"
