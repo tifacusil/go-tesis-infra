@@ -81,7 +81,34 @@ echo "    corrida se congela al dormir la máquina:  powercfg /change standby-ti
 echo "                                              powercfg /change monitor-timeout-ac 10"
 echo ""
 
-"$SCRIPT_DIR/reset-state.sh" || echo "AVISO: reset-state falló, la corrida de 12h puede arrancar con estado residual (Redis backlog / alerts) de una corrida anterior." >&2
+# El reset TIENE que cortar la corrida si falla. Antes solo imprimía un AVISO y
+# seguía: 12h arrancando sobre Redis y la tabla alerts de una corrida anterior,
+# produciendo datos contaminados que igual PARECEN válidos — el peor resultado
+# posible, porque no se nota hasta el análisis y ya no hay forma de saber qué
+# era residual. Y el aviso se pierde: nadie mira la consola a las 3am.
+#
+# No es hipotético: al 2026-07-17 el Sistema A fallaba el reset por completo
+# (Redis "NOAUTH Authentication required" y MySQL con puerto/usuario/DB
+# equivocados) y habría arrancado con 13069 alertas residuales.
+#
+# ALLOW_DIRTY_START=1 es la vía de escape explícita (ej. re-lanzar una corrida
+# ya sucia a propósito): hay que pedirla, no es el default.
+if ! "$SCRIPT_DIR/reset-state.sh"; then
+  if [[ "${ALLOW_DIRTY_START:-0}" == "1" ]]; then
+    echo "AVISO: reset-state falló, pero ALLOW_DIRTY_START=1 — se arranca igual." >&2
+    echo "  La corrida parte con estado residual (Redis backlog / tabla alerts). Los" >&2
+    echo "  resultados NO son comparables con una corrida limpia: anotarlo en el análisis." >&2
+  else
+    echo "" >&2
+    echo "ERROR: reset-state falló — NO se arranca la corrida de 12h." >&2
+    echo "  Arrancar así dejaría estado residual y 12h de datos contaminados que" >&2
+    echo "  parecen válidos. Revisar la salida de arriba: lo más común es que falten" >&2
+    echo "  credenciales para SSH_ORCHESTRATOR=native (Sistema A necesita" >&2
+    echo "  REDIS_PASSWORD + MYSQL_EW_PASSWORD/PORT/USER/DATABASE — ver load-tests/.env)." >&2
+    echo "  Para arrancar igual, a sabiendas: ALLOW_DIRTY_START=1 $0" >&2
+    exit 1
+  fi
+fi
 
 region_id=$(grafana_annotate_region_start "Fase 2 · Sistema $SYSTEM · sostenida ${SUSTAINED_RATE}req/s (12h)" "fase-2" "sistema-$SYSTEM" "sustained-rate-$SUSTAINED_RATE")
 # Si la corrida de 12h muere a mitad de camino, igual queremos cerrar la
