@@ -149,11 +149,63 @@ done <<<"$targets"
 # (|| true): si ya no está, no importa. Se llama SIEMPRE por trap: dejar 8s de
 # delay puesto en producción sería peor que no haber corrido el escenario.
 _netem_clear() {
-  local pid
-  for pid in "${injected_pids[@]:-}"; do
+  # Los PIDs se RE-RESUELVEN acá, no se reusan los de la inyección. El delay
+  # puede tumbar las probes del propio data-analysis (kubelet las cronometra a
+  # 5s) y hacer que kubelet reinicie el contenedor: entonces el PID guardado al
+  # inyectar ya no existe, pero el netns del pod SÍ sobrevive — lo dueña el
+  # sandbox (pause), no el contenedor — y se queda con el netem puesto.
+  # Limpiar por PID muerto falla, el `|| true` se lo traga, y quedan 8s de
+  # delay en producción. Paso exactamente eso el 2026-07-16.
+  #
+  # Se barren los netns de los contenedores Y de los sandboxes: si el
+  # contenedor está en crashloop puede no aparecer en `crictl ps` justo ahora,
+  # pero su sandbox sigue vivo con el netns intacto.
+  local pid ip
+  while read -r pid ip; do
     [[ -n "$pid" ]] || continue
-    _sudo_run "nsenter -t $pid -n tc qdisc del dev $NETEM_IFACE root 2>/dev/null || true" >/dev/null 2>&1 || true
-  done
+    _sudo_run "nsenter -t $pid -n tc qdisc del dev $NETEM_IFACE root" >/dev/null 2>&1 || true
+  done <<<"$(_da_targets)"
+
+  while read -r pid; do
+    [[ -n "$pid" ]] || continue
+    _sudo_run "nsenter -t $pid -n tc qdisc del dev $NETEM_IFACE root" >/dev/null 2>&1 || true
+  done <<<"$(_da_sandbox_pids)"
+}
+
+# _da_sandbox_pids — PIDs de los sandboxes (contenedores pause) de data-analysis.
+# El netns vive acá y sobrevive a los reinicios del contenedor de la app.
+_da_sandbox_pids() {
+  _sudo_run "for p in \$(crictl pods --name $DA_CONTAINER_NAME -q 2>/dev/null); do
+    crictl inspectp -o go-template --template '{{.info.pid}}' \$p 2>/dev/null
+  done" 2>/dev/null || true
+}
+
+# _netem_verify_gone — comprueba que NINGÚN netns de data-analysis quedó con
+# netem. No alcanza con "corrí el cleanup": si falla, hay que gritarlo con el
+# comando manual, porque un delay olvidado envenena las horas restantes de una
+# corrida de 12h y los datos siguen pareciendo válidos.
+_netem_verify_gone() {
+  local dirty=""
+  local pid ip
+  while read -r pid ip; do
+    [[ -n "$pid" ]] || continue
+    if _sudo_run "nsenter -t $pid -n tc qdisc show dev $NETEM_IFACE" 2>/dev/null | grep -q netem; then
+      dirty+=" $pid"
+    fi
+  done <<<"$(_da_targets)"
+
+  if [[ -n "$dirty" ]]; then
+    echo "" >&2
+    echo "ERROR CRÍTICO: quedó netem puesto en el/los netns:$dirty" >&2
+    echo "  El Sistema B está DEGRADADO ahora mismo. Quitarlo a mano en $SSH_HOST:" >&2
+    echo "    for id in \$(crictl ps --name $DA_CONTAINER_NAME -q); do" >&2
+    echo "      pid=\$(crictl inspect -o go-template --template '{{.info.pid}}' \$id)" >&2
+    echo "      nsenter -t \$pid -n tc qdisc del dev $NETEM_IFACE root" >&2
+    echo "    done" >&2
+    return 1
+  fi
+  echo "    Verificado: no quedó netem en ningún netns de $DA_CONTAINER_NAME."
+  return 0
 }
 
 _cleanup() {
@@ -162,6 +214,12 @@ _cleanup() {
   echo "--- Limpieza: quitando netem y parando el driver ---"
   _driver_stop
   _netem_clear
+  # Si el netem sobrevive a la limpieza, el exit code TIENE que reflejarlo
+  # aunque el escenario en sí haya salido bien: dejar el sistema degradado es
+  # peor que un escenario fallido, y el orquestador de 12h solo mira el rc.
+  if ! _netem_verify_gone; then
+    rc=1
+  fi
   [[ -n "${region_id:-}" ]] && grafana_annotate_region_end "$region_id"
   exit "$rc"
 }
@@ -242,6 +300,7 @@ fi
 echo ""
 echo "--- Quitando la latencia (fin de la ventana de fallo) ---"
 _netem_clear
+_netem_verify_gone || exit 1
 _driver_stop
 driver_pid=""
 

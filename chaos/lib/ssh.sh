@@ -61,7 +61,14 @@ _ssh_require() {
 # efímero con ambos (alpine + apk). Mismo patrón que reset-state.sh.
 _ssh_run() {
   local remote_cmd="$1"
-  local ssh_opts=(-p "$SSH_PORT" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
+  # -n (stdin desde /dev/null) es obligatorio: sin eso ssh LEE stdin, y dentro
+  # de un `while read ... <<<"$(...)"` se traga el resto de la entrada — el loop
+  # corre una sola vuelta y las demás desaparecen sin error. Se detectó
+  # inyectando netem en los 2 pods de data-analysis: solo llegaba al primero, y
+  # el cleanup (mismo patrón) habría limpiado solo uno, dejando al otro con el
+  # delay puesto en producción. El password de sudo NO viaja por este stdin: va
+  # en el propio comando remoto (`echo pass | sudo -S`), así que -n no lo rompe.
+  local ssh_opts=(-n -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
 
   if command -v ssh >/dev/null 2>&1; then
     if [[ -n "${SSH_KEY_PATH:-}" ]]; then
