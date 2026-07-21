@@ -53,5 +53,7 @@ spec:
               cpu: 50m
               memory: 64Mi
             limits:
-              cpu: "100m"
+              # Sin limits.cpu — ver comentario en data-receiving/deployment.yaml:
+              # el cap de 100m medía el throttling del cgroup, no la arquitectura,
+              # y rompía la paridad contra Sistema A (systemd sin limite).
               memory: 256Mi

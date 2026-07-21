@@ -56,5 +56,11 @@ spec:
               cpu: 50m
               memory: 64Mi
             limits:
-              cpu: "100m"
+              # Sin limits.cpu a proposito: un cap de 100m estrangulaba el pod a
+              # 0.1 core y el kernel aplicaba CFS throttling bajo carga, midiendo
+              # el cap en vez de la arquitectura (Fase 1: B colapsaba a 400 req/s
+              # con colas y backlog en 0 — el unico recurso agotado era CPU).
+              # Sistema A corre como proceso nativo systemd sin cgroup limit, asi
+              # que capar B rompe la paridad de la comparacion A vs B.
+              # requests.cpu sigue gobernando el scheduling.
               memory: 256Mi
