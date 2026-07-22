@@ -26,6 +26,12 @@ Hallazgos principales:
 4. Ese defecto **lo introdujo el commit `b7fbe66` en el Sistema A**, y el port a Go lo
    copió. Corregido en ambos sistemas.
 
+**Estado al 2026-07-22:** las seis correcciones que el diagnóstico dejó pendientes están
+aplicadas (§10) — corpus de flota, sub-segundo del baseline, compare-and-set contra el
+race entre réplicas, escalones intermedios, repeticiones con IC 95%, y CPU del cliente
+instrumentada. Los números de §2 son del corpus viejo y **ya no son comparables**: hace
+falta re-correr el ladder completo en ambos sistemas (§10.7).
+
 ---
 
 ## 2. Punto de partida
@@ -224,7 +230,7 @@ del sistema con una frecuencia que en campo sería excepcional, y el sensor úni
 cualquier paralelización correcta del consumidor.
 
 El contraste con el estudio base (Bai et al. 2020), que fija el régimen de operación real,
-está en §13.
+está en §13. **Corregido en §10.1**: el corpus del ladder ya no es este.
 
 ---
 
@@ -238,6 +244,9 @@ está en §13.
 | `early-warning-service` (A) | `5c777ee` | **mismo fix; revierte `b7fbe66`** |
 | `go-tesis-infra` | `0036583` | `CONSUMER_WORKERS=1` en el deployment |
 
+La segunda tanda (corpus, CAS del baseline, escalones, repeticiones, CPU del cliente) está
+en §10.
+
 ### 7.1 Sobre el worker pool (`8ad71d8`)
 
 Se implementó concurrencia con sharding por `sensor_id` — necesario para la correctitud,
@@ -249,7 +258,8 @@ Además ensancha el race entre réplicas (el sharding no cruza pods): la tasa de
 subió de 3.61% a 5.12%.
 
 Por eso `CONSUMER_WORKERS=1` en `0036583`. Subirlo solo tiene sentido con carga
-multi-sensor.
+multi-sensor — que es lo que habilita §10.1, con el race entre réplicas ya cerrado por
+§10.3. Sigue en 1 hasta medirlo de nuevo.
 
 ---
 
@@ -305,47 +315,136 @@ El baseline **no retrocedió** y no se generó ninguna alerta. Clave de prueba e
 
 ---
 
-## 10. Pendiente
+## 10. Segunda tanda de correcciones
 
-1. **Corregir el corpus del emulador** (§6, §13). Es lo que más pesa: mientras
-   `cumulative_displacement_mm` sea ruido blanco y haya un solo sensor, cualquier
-   `SUSTAINED_RATE` medido está dominado por un camino irreal, y el worker pool no puede
-   rendir. La forma que se desprende del estudio base: **N sensores a 1 muestra/hora**,
-   escalando N (Bai llega a 3,233), con desplazamiento acumulado monótono y deformaciones
-   del orden de mm/día. Requiere re-correr también el ladder de A para mantener
-   comparabilidad.
-2. **`cache.go:78`**: `Format(time.RFC3339)` pierde el sub-segundo del baseline; el
-   original Python guarda `isoformat()` completo. Fix: `RFC3339Nano`. Inactivo mientras
-   los timestamps de origen tengan resolución de segundo, pero es una divergencia real.
-3. **Lock por sensor en Redis** (o `WATCH`/Lua). El sharding por sensor no cruza
-   réplicas, así que el race entre pods sigue abierto. Es el prerequisito para subir
-   `CONSUMER_WORKERS` con seguridad.
-4. **Escalones intermedios en el ladder** (150, 200, 300). Entre 100 y 400 hay un salto
-   de 4x sin medir; el servidor sostuvo ~155 fps en vu-400 aun en dificultades, así que
-   `SUSTAINED_RATE=100` es un piso conservador, no un techo medido (`plan-pruebas.md` §6
-   ya contempla extender la escalera).
-5. **Instrumentar la CPU de la máquina cliente** durante cada nivel, para descartar el
-   límite falso del engine con evidencia y no con aritmética.
-6. **Repetir el ladder 3–4 veces por nivel** y reportar mediana, p90/p95/p99 e intervalos
-   de confianza al 95%, como hace el estudio metodológico base (§13.2). Actualmente hay
-   una sola corrida por nivel.
+Los seis pendientes que dejó el diagnóstico, todos aplicados el 2026-07-22.
+
+### 10.1 Corpus del emulador (`dtu-emulator@9e32f0c`, `go-tesis-infra@fdcfbc2`)
+
+Lo que más pesaba. `src/sender/field.py` modela una **flota**: cada sensor es una función
+determinista de su id, con una tasa de reptación por debajo del umbral más bajo, eventos
+de deformación ocasionales que lo cruzan, y desplazamiento acumulado **monótono** — la
+magnitud que Bai et al. grafican en la Figura 8a. La lectura *i* lleva el timestamp que el
+sensor habría estampado en su *i*-ésima muestra horaria, contado desde la ventana de
+monitoreo del paper.
+
+`(sensor_id, reading_index)` determina la lectura por completo, así que cualquier worker
+del pool puede servir cualquier sensor y un respawn retoma la misma serie; las cachés por
+sensor son memoización, no estado.
+
+La identidad la asigna el **engine**, que reparte cada `send` entre `DTU_SENSOR_COUNT`
+sensores round-robin (100 por defecto) y lleva el contador de lecturas — es el único
+proceso que ve la corrida entera. `DTU_SENSOR_COUNT=0` restaura el corpus previo.
+
+Medido sobre 100 sensores × 1,000 lecturas con los umbrales de Shangtan:
+
+| | antes | después |
+|---|---|---|
+| tasa de alerta | ~50% de las evaluaciones | **1.03%** |
+| distribución | 100% `red` | blue 0.30% / orange 0.16% / red 0.57% |
+| velocidad máxima | 259,200,000 mm/día | **50.5 mm/día** |
+| sensores | 1 | 100 (configurable) |
+
+Verificado extremo a extremo contra un servidor TCP falso que decodifica los frames:
+6 sensores, 10 frames cada uno, acumulado monótono por sensor y timestamps horarios con
+offset propio.
+
+### 10.2 Sub-segundo del baseline (`go-early-warning@534d884`)
+
+`Format(time.RFC3339)` → `RFC3339Nano` en `cache.go`. Inactivo mientras los timestamps de
+origen tengan resolución de segundo (el corpus nuevo también la tiene), pero era una
+divergencia real contra el `isoformat()` del original.
+
+### 10.3 Race del baseline entre réplicas (`go-early-warning@534d884`)
+
+`SetLastReading` pasa a ser un **compare-and-set en Lua**: la escritura solo aterriza si
+la almacenada es más vieja.
+
+Es una guarda, no un lock. Codifica el invariante ("el baseline nunca retrocede en el
+tiempo") en el único lugar que puede imponerlo atómicamente, cuesta el mismo round trip
+que el `SET` plano, y no deja lease que renovar ni que se filtre si un pod muere a mitad
+de la evaluación. Lo que **no** evita es que dos réplicas evalúen contra el mismo baseline
+apenas viejo; eso da una velocidad promediada sobre una ventana más larga, que es
+conservador, y converge apenas aterriza una de las escrituras.
+
+La comparación es sobre `timestamp_unix_us`, no sobre el string ISO: los timestamps con
+sub-segundo **no ordenan lexicográficamente** (`"…:00Z"` > `"…:00.5Z"` como texto, y al
+revés en el tiempo). Los microsegundos son más finos que el formato de cable (que lleva
+milisegundos) y siguen siendo exactos como *double* de Lua/cjson.
+
+Verificado contra el Redis real del Sistema B (`kubectl exec` en `redis-0`): 8 casos,
+incluidos "mismo timestamp", "un microsegundo más viejo", "un microsegundo más nuevo",
+entrada legacy sin score y entrada corrupta. El test de integración equivalente queda en
+`cache_integration_test.go`, con el mismo patrón de build tag y `EW_REDIS_ADDR` que
+`pkg/idempotency`.
+
+Es el prerequisito para subir `CONSUMER_WORKERS` con seguridad.
+
+### 10.4 Escalones intermedios (`go-tesis-infra@556439d`)
+
+`scenarios/vu-{150,200,300}.yml`. El hueco de 4x entre 100 y 400 queda cerrado.
+
+### 10.5 CPU de la máquina cliente (`go-tesis-infra@556439d`)
+
+`run-all.sh` la muestrea cada 5s a `vu-<nivel>-r<N>.client-cpu.csv`. Existe porque la
+conclusión de §3.3 se sostuvo con aritmética y no con evidencia.
+
+En Windows la muestra sale de `Win32_PerfFormattedData_PerfOS_Processor` y no de
+`Get-Counter`: este último toma la ruta del contador con los nombres **localizados**
+(`\Procesador(_Total)\% de tiempo de procesador` en un Windows en español), así que la
+ruta en inglés falla con *"El objeto especificado no se encontró"*.
+
+### 10.6 Repeticiones y estadística (`go-tesis-infra@556439d`)
+
+`REPEATS` (default 3) corre cada nivel N veces a `vu-<nivel>-r<N>.json`, y
+`aggregate-results.js` reporta mediana, media, desvío e intervalo de confianza al 95% de
+throughput, tasa de error, RTT p50/p90/p95/p99 y CPU del cliente.
+
+Con 3 corridas el multiplicador *t* es **4.303**, no 1.96: el intervalo sale ancho a
+propósito, y ese ancho *es* el resultado — dice cuánto no se puede afirmar con 3 corridas.
+
+Verificado contra los resultados históricos: reproduce B vu-400 = 40.1 fps con 87.9% de
+error, y A vu-400 = 398.7 fps.
+
+### 10.7 Lo que queda
+
+- **Re-correr el ladder completo en ambos sistemas.** Los números de §2 se midieron con el
+  corpus viejo; no son comparables con nada que se mida ahora. Con `REPEATS=3` y 8
+  escalones son ~4h15 por sistema.
+- **Barrer el tamaño de flota** hacia los 3,233 sensores del paper, ahora que
+  `DTU_SENSOR_COUNT` lo permite. A tasas de llegada bajas una flota grande implica que la
+  mayoría de los frames son la *primera* lectura de su sensor, que no tiene baseline
+  contra el cual evaluar.
+- **Subir `CONSUMER_WORKERS` en B.** Está en 1 por el corpus de un solo sensor; con flota
+  y con el CAS de §10.3 ya tiene sentido volver a medirlo.
+- **Portear §10.2 y §10.3 al Sistema A**, que tiene el mismo `set_last_reading`
+  incondicional (`redis_cache.py:99`) y también corre 2 instancias sobre la misma cola.
+  Sin esto los dos sistemas dejan de ser equivalentes en esa dimensión.
 
 ---
 
-## 11. Efecto esperado del fix sobre el rendimiento
+## 11. Efecto esperado sobre el rendimiento
 
 Bajar la tasa de alerta de ~5% a ~0.5% quita ~7.4 ms de los 19.5 ms por mensaje:
 throughput estimado **102 → ~160 msg/s** (factor 1.6x).
 
-**No alcanza 400.** El multiplicador grande sigue siendo el corpus multi-sensor, que
-habilitaría el worker pool ya implementado (8 workers × ~51/s ≈ 408/s).
+**No alcanza 400 por sí solo.** El multiplicador grande es el corpus multi-sensor
+(§10.1), que habilita el worker pool ya implementado: 8 workers × ~51/s ≈ 408/s.
 
 Los ~11 ms restantes por mensaje son I/O de fondo: Redis pod-a-pod contra localhost en A,
 más las dos operaciones extra de idempotencia que A no tiene.
 
+Con el corpus corregido la tasa de alerta medida es 1.03% (§10.1), así que el término del
+camino de alerta pasa de ~7.8 ms/mensaje a ~1.7 ms. **Nada de esto está medido todavía en
+el sistema**: son proyecciones sobre el modelo de costo de §4, y sólo el ladder re-corrido
+(§10.7) las confirma o las refuta.
+
 ---
 
 ## 12. Reproducibilidad
+
+El corpus de §10.1 sí está versionado y cubierto por tests
+(`dtu-emulator/tests/test_field.py`), igual que el agregador de §10.6.
 
 Los harnesses del diagnóstico (test diferencial de motores, generador de corpus con el
 emulador real, y el barrido de desorden contra Redis) se construyeron en el scratchpad de
