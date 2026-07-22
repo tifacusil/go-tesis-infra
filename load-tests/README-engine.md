@@ -87,13 +87,47 @@ peak-rate sizing unless you have a specific reason to shrink it.
 | `contractFile` | (mapped from `sensorType`) | Override to point at a different contract example filename. |
 | `seed` | none | Forwarded to `--seed` for reproducible payloads. |
 | `corrupt` | none | Forwarded to `--corrupt` (`crc`, `sync_start`, `sync_end`, `length`, `version`, `type`, `schema`, `random`) to test C#-side error handling. |
+| `sensorCount` | `DTU_SENSOR_COUNT`, else `100` | Size of the sensor fleet the run is spread over — see below. |
 
 Per-field payload overrides (e.g. the old `projectId`/`fixQuality`) are **not**
-supported — dtu-emulator's fixture mode randomizes payload fields itself and
-sources `project_id`/`sensor_id`/`sampling_interval_seconds` from the contract
-example file's own top-level fields. To change those, edit or add a contract
-example under `dtu-emulator/contracts/examples/`, or point `contractFile` at
-a different one.
+supported — dtu-emulator randomizes payload fields itself and sources
+`project_id`/`sampling_interval_seconds` from the contract example file's own
+top-level fields. To change those, edit or add a contract example under
+`dtu-emulator/contracts/examples/`, or point `contractFile` at a different one.
+
+### Sensor fleet
+
+`sensor_id` used to come from the contract example too, so an entire run came
+from one sensor. That breaks the measurement in two independent ways:
+
+- Threshold evaluation is stateful **per sensor**, so per-sensor identity is the
+  natural shard key for the early-warning consumer. One `sensor_id` collapses
+  every worker onto one shard — the sensor-sharded pool added in
+  `go-early-warning` measured exactly zero improvement — and funnels the whole
+  run's read-modify-write traffic through a single Redis key.
+- One sensor at 400 fps is ~1.4 million times the per-sensor sampling rate of
+  the system being replicated (Bai et al. 2020 sample hourly), which is what
+  made the pre-fix corpus produce a `red` alert on ~5% of messages.
+
+The engine now owns fleet identity: each `send` is assigned a sensor from a
+fleet of `sensorCount` round-robin, and carries the index of that sensor's
+reading in the series. dtu-emulator turns `(sensor_id, reading_index)` into a
+physically consistent reading — monotonic cumulative displacement, hourly
+timestamps, deformation speeds in mm/day (see `dtu-emulator/src/sender/field.py`
+and its README section). Reading counters live in the engine because it is the
+one process that sees the whole run; the workers stay interchangeable and a
+respawn does not lose a series.
+
+```bash
+export DTU_SENSOR_COUNT=100   # default
+export DTU_SENSOR_COUNT=0     # pre-fix corpus: one sensor, random payload per frame
+```
+
+Keep `sensorCount` ≥ the number of early-warning consumer workers, or the
+sharding has nothing to spread. Raising it toward the paper's 3,233 sensors is
+the fleet-scale sweep; note that at low arrival rates a large fleet means most
+frames are a sensor's *first* reading, which has no baseline to evaluate
+against and therefore never alerts.
 
 ## One-time / per-shell setup
 

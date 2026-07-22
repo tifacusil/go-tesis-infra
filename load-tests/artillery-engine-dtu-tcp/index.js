@@ -41,6 +41,7 @@ const ACK_TIMEOUT_MS = 5000;
 const DEFAULT_PORT = 5000; // puerto TCP de data-receiving-1 (ver docker-compose.yml de tesis-infra)
 const DEFAULT_SENSOR_TYPE = 'gnss';
 const DEFAULT_POOL_SIZE = 50; // fallback when pool size can't be inferred — see resolvePoolSize
+const DEFAULT_SENSOR_COUNT = 100; // ver "flota de sensores" más abajo
 
 // Client-side ceiling on how long a `send` may sit queued + in flight on a
 // worker before its VU is failed. The Python worker already bounds each
@@ -117,6 +118,51 @@ function resolvePoolSize(script) {
     }
   }
   return peak > 0 ? Math.ceil(peak) : DEFAULT_POOL_SIZE;
+}
+
+// ---- flota de sensores ---------------------------------------------------
+//
+// La identidad del sensor salía del contract example que dtu-emulator carga,
+// así que TODA la carga venía de un único sensor_id. Eso invalida dos cosas a
+// la vez: la evaluación de umbral es stateful por sensor, así que un solo
+// sensor colapsa cualquier sharding del consumidor sobre una sola partición
+// (el worker pool de early-warning midió exactamente cero mejora), y pone el
+// read-modify-write de toda la corrida sobre una única clave de Redis.
+//
+// Ahora la identidad la asigna el engine: reparte cada `send` entre
+// DTU_SENSOR_COUNT sensores round-robin y le dice al emulador qué lectura de
+// esa serie es. El emulador convierte (sensor_id, reading_index) en una
+// lectura físicamente consistente — ver dtu-emulator/src/sender/field.py.
+//
+// El contador de lecturas vive acá y no en los workers a propósito: el engine
+// es un único proceso Node, así que es el único punto que ve la corrida
+// entera. Los workers quedan intercambiables y un respawn no pierde la serie.
+//
+// DTU_SENSOR_COUNT=0 restaura el corpus previo (un solo sensor, payload
+// aleatorio por frame), para reproducir corridas viejas.
+const readingIndexBySensor = new Map();
+let nextSensorSeq = 0;
+
+function resolveSensorCount(spec, context, helpers) {
+  const raw = spec.sensorCount !== undefined
+    ? interpolate(spec.sensorCount, context, helpers)
+    : process.env.DTU_SENSOR_COUNT;
+  if (raw === undefined || raw === '') return DEFAULT_SENSOR_COUNT;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : DEFAULT_SENSOR_COUNT;
+}
+
+// Convención del paper: su estación GNSS de Shangtan es GXZM-DB03.
+function sensorIdFor(index) {
+  return `GXZM-DB${String(index).padStart(3, '0')}`;
+}
+
+function assignReading(sensorCount) {
+  if (sensorCount <= 0) return null;
+  const sensorId = sensorIdFor(nextSensorSeq++ % sensorCount);
+  const readingIndex = readingIndexBySensor.get(sensorId) || 0;
+  readingIndexBySensor.set(sensorId, readingIndex + 1);
+  return { sensorId, readingIndex };
 }
 
 function spawnWorker(host, port) {
@@ -348,6 +394,11 @@ function sendViaPool(target, poolSize, spec, context, helpers, ee, callback) {
   const contractFile = path.join(DTU_EMULATOR_PATH, 'contracts', 'examples', contractFileName);
 
   const request = { file: contractFile };
+  const reading = assignReading(resolveSensorCount(spec, context, helpers));
+  if (reading) {
+    request.sensor_id = reading.sensorId;
+    request.reading_index = reading.readingIndex;
+  }
   const seed = resolveField(spec, 'seed', context, helpers, undefined);
   if (seed !== undefined) request.seed = Number(seed);
   const corrupt = resolveField(spec, 'corrupt', context, helpers, undefined);
