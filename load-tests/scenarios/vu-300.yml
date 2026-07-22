@@ -1,0 +1,20 @@
+config:
+  # host:port de una instancia data-receiving (ingesta TCP, ver README-engine.md).
+  # TARGET_HOST debe ser "host" o "host:port" — sin esquema http://.
+  target: "{{ $processEnvironment.TARGET_HOST }}"
+  engines:
+    dtu-tcp: {}
+  phases:
+    - name: "steady-state-300vu"
+      duration: 180
+      arrivalRate: 300
+    - name: "measure-300vu"
+      duration: 420
+      arrivalRate: 300
+
+scenarios:
+  - name: "Ingest GNSS frame (TCP)"
+    engine: dtu-tcp
+    flow:
+      - send:
+          sensorType: "gnss"  # project_id y sampling_interval vienen del contract example de dtu-emulator; sensor_id lo asigna el engine sobre la flota (DTU_SENSOR_COUNT) — ver README-engine.md

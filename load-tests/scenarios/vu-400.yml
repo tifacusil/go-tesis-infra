@@ -17,4 +17,4 @@ scenarios:
     engine: dtu-tcp
     flow:
       - send:
-          sensorType: "gnss"  # identity (project_id, sensor_id) viene del contract example de dtu-emulator — ver README-engine.md
+          sensorType: "gnss"  # project_id y sampling_interval vienen del contract example de dtu-emulator; sensor_id lo asigna el engine sobre la flota (DTU_SENSOR_COUNT) — ver README-engine.md

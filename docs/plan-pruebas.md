@@ -50,12 +50,12 @@ resistencia — su duración corta es intencional.
 
 ### 1.2 Escalones de carga
 
-Implementados en `load-tests/scenarios/vu-{001,010,050,100,400}.yml`, corridos
-en secuencia por `load-tests/run-all.sh`:
+Implementados en `load-tests/scenarios/vu-{001,010,050,100,150,200,300,400}.yml`,
+corridos en secuencia por `load-tests/run-all.sh`:
 
 ```bash
 cd tesis-infra/load-tests
-TARGET_HOST=<host>:5000 SYSTEM=B ./run-all.sh
+TARGET_HOST=<host>:5000 SYSTEM=B REPEATS=3 ./run-all.sh
 ```
 
 > La ingesta real es TCP (frames binarios DTU a `data-receiving:5000-5002`),
@@ -67,10 +67,31 @@ TARGET_HOST=<host>:5000 SYSTEM=B ./run-all.sh
 | 10 | `scenarios/vu-010.yml` |
 | 50 | `scenarios/vu-050.yml` |
 | 100 | `scenarios/vu-100.yml` |
+| 150 | `scenarios/vu-150.yml` |
+| 200 | `scenarios/vu-200.yml` |
+| 300 | `scenarios/vu-300.yml` |
 | 400 | `scenarios/vu-400.yml` |
 
 30s de pausa entre niveles (drenaje de colas/conexiones antes del siguiente
 escalón).
+
+Los escalones 150/200/300 se agregaron después de la primera pasada: entre 100
+y 400 había un salto de 4x sin medir, y en `vu-400` el Sistema B siguió
+ingiriendo ~155 fps aun mientras fallaba. Sin nada en el medio,
+`SUSTAINED_RATE=100` es un piso conservador, no un techo medido.
+
+**Repeticiones.** `REPEATS` (default 3) corre cada nivel N veces, a
+`results/<SYSTEM>/vu-<nivel>-r<N>.json`. Con una sola corrida por nivel no hay
+forma de distinguir una diferencia real del ruido de esa corrida; el estudio
+metodológico base repite 3-4 veces y reporta mediana, percentiles e intervalos
+de confianza al 95%. `node load-tests/aggregate-results.js <SYSTEM>` produce
+justamente eso a partir de los N archivos.
+
+**Flota de sensores.** El engine reparte la carga entre `DTU_SENSOR_COUNT`
+sensores (default 100), cada uno con su propia serie de desplazamiento. Antes
+toda la carga venía de un único `sensor_id`, lo que colapsaba el sharding del
+consumidor de early-warning sobre una sola partición y ponía toda la escritura
+de baseline sobre una sola clave de Redis. Ver `load-tests/README-engine.md`.
 
 ### 1.3 Criterio de falla (dónde se detiene el escalamiento)
 
@@ -90,19 +111,25 @@ Si ninguna señal se dispara en el nivel 400, ese es el techo probado (no hay
 niveles más altos definidos aún — ver §6 para extender el escalón).
 
 **Cuello de botella del cliente, no del sistema bajo prueba:** el engine
-`artillery-engine-dtu-tcp` arranca un proceso Python nuevo (`dtu-emulator`)
-por cada frame enviado — medido en esta máquina, ~224ms de overhead solo de
-arranque del intérprete, antes de tocar la red (ver
-`load-tests/README-engine.md`). A partir de cierto nivel de VU, la máquina
-que corre Artillery puede saturarse por esto — no por el sistema bajo
-prueba — y entonces las señales de la tabla de arriba estarían midiendo un
-límite falso. Señal de que esto está pasando: CPU de la máquina cliente
-(no de los pods/contenedores del sistema) al 100% sostenido durante la
-corrida, o `arrivalRate` real (ver reporte Artillery, `vusers.created` vs.
-tiempo transcurrido) notablemente por debajo del configurado. Si se
-sospecha esto en los niveles 100/400, correr esos niveles desde una
-máquina más potente antes de concluir que el sistema real no aguanta esa
-tasa.
+`artillery-engine-dtu-tcp` mantiene un pool de procesos Python (`dtu-emulator`)
+con una conexión TCP persistente cada uno, dimensionado al `arrivalRate` pico
+del escenario. A partir de cierto nivel de VU la máquina que corre Artillery
+puede saturarse — no el sistema bajo prueba — y entonces las señales de la
+tabla de arriba estarían midiendo un límite falso.
+
+`run-all.sh` muestrea la CPU de la máquina cliente cada 5s durante cada
+corrida y la deja en `results/<SYSTEM>/vu-<nivel>-r<N>.client-cpu.csv`;
+`aggregate-results.js` la reporta junto al resto. Existe porque en `vu-400` el
+servidor ingirió 111,783 frames mientras el cliente reportó 28,959, y la
+conclusión de "el cliente no era el cuello de botella" se sostuvo con
+aritmética (pool de 400 slots / 2.5s de RTT = 160/s, contra 154.8/s medidos)
+en vez de con evidencia.
+
+Señales de que el cliente es el límite: CPU de la máquina cliente (no de los
+pods del sistema) cerca del 100% sostenido, o `arrivalRate` real
+(`vusers.created` vs. tiempo transcurrido) notablemente por debajo del
+configurado con CPU alta. Si se sospecha, correr ese nivel desde una máquina
+más potente antes de concluir que el sistema no aguanta esa tasa.
 
 ### 1.4 Salida de la fase
 
@@ -225,8 +252,11 @@ tolerancia a fallos bajo carga (relevante para la comparación A vs. B), pero
 ## 3. Secuencia end-to-end
 
 ```
-Fase 1 (descubrimiento, ~52 min: 5 × 10min + 4 × 30s pausa)
-  vu-001 (10min) → vu-010 (10min) → vu-050 (10min) → vu-100 (10min) → vu-400 (10min)
+Fase 1 (descubrimiento, ~4h15 con REPEATS=3: 8 niveles × 3 × 10min + pausas)
+  vu-001 → vu-010 → vu-050 → vu-100 → vu-150 → vu-200 → vu-300 → vu-400
+  (cada nivel × REPEATS corridas de 10min, 30s de pausa entre corridas)
+  ↓
+  node load-tests/aggregate-results.js <SYSTEM>
   ↓
   ¿algún nivel dispara criterio de falla (§1.3)?
     sí → SUSTAINED_RATE = último nivel sin falla
@@ -448,18 +478,22 @@ cd tesis-infra
 #    Una vez: cp load-tests/.env.example load-tests/.env && editar el token.
 #    Se carga solo; no hace falta export en cada sesión.
 
-# 1. Fase de descubrimiento (§1) — ~52 min, bloqueante, corre los 5 escalones
-#    en secuencia y termina sola. Revisar cada reporte contra los criterios
-#    de falla (§1.3) antes de continuar.
+# 1. Fase de descubrimiento (§1) — bloqueante, corre los 8 escalones
+#    (001/010/050/100/150/200/300/400) x REPEATS en secuencia y termina sola.
+#    Con REPEATS=3 son 24 corridas de ~10.5 min: ~4h 15min. Revisar contra los
+#    criterios de falla (§1.3) antes de continuar.
 #    TARGET_HOST es host:port de data-receiving, SIN esquema (ingesta TCP,
 #    ver load-tests/README-engine.md) — no el host del gateway HTTP.
-TARGET_HOST=<host>:5000 SYSTEM=B ./load-tests/run-all.sh
+#    Para una pasada rápida de un solo nivel: VU_LEVELS="100" REPEATS=1.
+TARGET_HOST=<host>:5000 SYSTEM=B REPEATS=3 ./load-tests/run-all.sh
 
-# 2. Determinar SUSTAINED_RATE (§1.4) inspeccionando los reportes de (1):
-for VU in 001 010 050 100 400; do
-  artillery report "load-tests/results/B/vu-${VU}.json"
-done
-# → el último nivel sin violar §1.3 es SUSTAINED_RATE (ej. 100)
+# 2. Determinar SUSTAINED_RATE (§1.4) con el agregado de las repeticiones:
+node load-tests/aggregate-results.js B
+# → mediana, media, desvío e IC 95% de throughput, tasa de error, RTT p50/p90/
+#   p95/p99 y CPU de la máquina cliente, por nivel. El último nivel sin violar
+#   §1.3 es SUSTAINED_RATE.
+# Para el detalle de una corrida puntual:
+#   artillery report "load-tests/results/B/vu-100-r1.json"
 
 # 3. Fase de validación de resiliencia (§2) — 12h 3min, bloqueante.
 #    run-endurance.sh y el orquestador de chaos deben lanzarse JUNTOS: el
