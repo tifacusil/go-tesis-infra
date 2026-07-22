@@ -1,0 +1,19 @@
+config:
+  # Escenario plantilla para run-sharded.sh: NO fija arrivalRate, lo inyecta el
+  # runner con --overrides (rate total / cantidad de shards). Correrlo directo
+  # con `artillery run` usaría el override vacío y no enviaría nada útil — usar
+  # siempre run-sharded.sh. Ver load-tests/README-engine.md.
+  target: "{{ $processEnvironment.TARGET_HOST }}"
+  engines:
+    dtu-tcp: {}
+  phases:
+    - name: "placeholder"
+      duration: 1
+      arrivalRate: 1
+
+scenarios:
+  - name: "Ingest GNSS frame (TCP)"
+    engine: dtu-tcp
+    flow:
+      - send:
+          sensorType: "gnss"  # project_id y sampling_interval vienen del contract example; sensor_id lo asigna el engine sobre el rango de flota del shard (DTU_SENSOR_BASE/COUNT) — ver README-engine.md

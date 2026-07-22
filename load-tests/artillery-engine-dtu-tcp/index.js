@@ -37,6 +37,13 @@ const path = require('path');
 const readline = require('readline');
 const { spawn, spawnSync } = require('child_process');
 
+// Every worker pipes its stderr to this process's stderr (see spawnWorker), so
+// a pool of N workers registers N sets of pipe listeners on the one sink. Past
+// 10 Node prints a MaxListenersExceededWarning per worker — pure noise at the
+// pool sizes these load tests use (hundreds), and it drowns real warnings. The
+// fan-in is intentional and bounded by the pool, so lift the cap on the sink.
+process.stderr.setMaxListeners(0);
+
 const ACK_TIMEOUT_MS = 5000;
 const DEFAULT_PORT = 5000; // puerto TCP de data-receiving-1 (ver docker-compose.yml de tesis-infra)
 const DEFAULT_SENSOR_TYPE = 'gnss';
@@ -140,6 +147,19 @@ function resolvePoolSize(script) {
 //
 // DTU_SENSOR_COUNT=0 restaura el corpus previo (un solo sensor, payload
 // aleatorio por frame), para reproducir corridas viejas.
+//
+// DTU_SENSOR_BASE desplaza el rango de ids de este proceso. Existe para poder
+// repartir una corrida entre varios procesos Artillery (cada uno un event loop
+// propio, en su propio core) sin que dos de ellos toquen el mismo sensor: el
+// contador de lecturas vive por proceso, así que dos procesos sobre el mismo
+// sensor_id le asignarían el mismo reading_index — mismo timestamp, y el motor
+// descarta el segundo (dt<=0). Con bases disjuntas (proceso k de N usa
+// [k·count, (k+1)·count)) cada sensor lo escribe un solo proceso y su serie
+// queda intacta. Ver load-tests/run-sharded.sh.
+const SENSOR_BASE = (() => {
+  const n = Number(process.env.DTU_SENSOR_BASE);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+})();
 const readingIndexBySensor = new Map();
 let nextSensorSeq = 0;
 
@@ -159,7 +179,7 @@ function sensorIdFor(index) {
 
 function assignReading(sensorCount) {
   if (sensorCount <= 0) return null;
-  const sensorId = sensorIdFor(nextSensorSeq++ % sensorCount);
+  const sensorId = sensorIdFor(SENSOR_BASE + (nextSensorSeq++ % sensorCount));
   const readingIndex = readingIndexBySensor.get(sensorId) || 0;
   readingIndexBySensor.set(sensorId, readingIndex + 1);
   return { sensorId, readingIndex };
