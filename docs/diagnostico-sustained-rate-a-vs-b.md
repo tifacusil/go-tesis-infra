@@ -410,7 +410,9 @@ error, y A vu-400 = 398.7 fps.
 
 - **Re-correr el ladder completo en ambos sistemas.** Los números de §2 se midieron con el
   corpus viejo; no son comparables con nada que se mida ahora. Con `REPEATS=3` y 8
-  escalones son ~4h15 por sistema.
+  escalones son ~4h15 por sistema. **B ya está hecho** (2026-07-22): resultados y análisis
+  en [`ladder-b-2026-07-22.md`](ladder-b-2026-07-22.md). Falta A, sin tocar el corpus en
+  el medio.
 - **Barrer el tamaño de flota** hacia los 3,233 sensores del paper, ahora que
   `DTU_SENSOR_COUNT` lo permite. A tasas de llegada bajas una flota grande implica que la
   mayoría de los frames son la *primera* lectura de su sensor, que no tiene baseline
