@@ -223,6 +223,9 @@ cumul = rng.uniform(0.0, 3000.0)
 del sistema con una frecuencia que en campo sería excepcional, y el sensor único impide
 cualquier paralelización correcta del consumidor.
 
+El contraste con el estudio base (Bai et al. 2020), que fija el régimen de operación real,
+está en §13.
+
 ---
 
 ## 7. Cambios aplicados
@@ -304,10 +307,13 @@ El baseline **no retrocedió** y no se generó ninguna alerta. Clave de prueba e
 
 ## 10. Pendiente
 
-1. **Corregir el corpus del emulador** (§6). Es lo que más pesa: mientras
+1. **Corregir el corpus del emulador** (§6, §13). Es lo que más pesa: mientras
    `cumulative_displacement_mm` sea ruido blanco y haya un solo sensor, cualquier
    `SUSTAINED_RATE` medido está dominado por un camino irreal, y el worker pool no puede
-   rendir. Requiere re-correr también el ladder de A para mantener comparabilidad.
+   rendir. La forma que se desprende del estudio base: **N sensores a 1 muestra/hora**,
+   escalando N (Bai llega a 3,233), con desplazamiento acumulado monótono y deformaciones
+   del orden de mm/día. Requiere re-correr también el ladder de A para mantener
+   comparabilidad.
 2. **`cache.go:78`**: `Format(time.RFC3339)` pierde el sub-segundo del baseline; el
    original Python guarda `isoformat()` completo. Fix: `RFC3339Nano`. Inactivo mientras
    los timestamps de origen tengan resolución de segundo, pero es una divergencia real.
@@ -320,6 +326,9 @@ El baseline **no retrocedió** y no se generó ninguna alerta. Clave de prueba e
    ya contempla extender la escalera).
 5. **Instrumentar la CPU de la máquina cliente** durante cada nivel, para descartar el
    límite falso del engine con evidencia y no con aritmética.
+6. **Repetir el ladder 3–4 veces por nivel** y reportar mediana, p90/p95/p99 e intervalos
+   de confianza al 95%, como hace el estudio metodológico base (§13.2). Actualmente hay
+   una sola corrida por nivel.
 
 ---
 
@@ -353,3 +362,92 @@ Nota operativa sobre el repo de A: `git fetch`/`pull` **fallan desde el servidor
 sucio y ~6 commits atrás de origin, y `/opt/early-warning-service` es `root:root`
 (requiere sudo y `git -c safe.directory=...`). Para modificarlo: clonar por HTTPS desde
 la máquina local y aplicar el archivo en `/opt` por separado.
+
+---
+
+## 13. Contraste con los estudios base
+
+Dos referencias sostienen el trabajo: **Bai et al. (2020)** aporta el sistema que se
+replica, y **El Fellah et al. (2026)** aporta el método experimental.
+
+### 13.1. Bai et al. (2020) — el sistema replicado
+
+> *The design and application of landslide monitoring and early warning system based on
+> microservice architecture.* Geomatics, Natural Hazards and Risk, 11(1), 928–948.
+> doi:10.1080/19475705.2020.1766580
+
+El Sistema A es una réplica fiel. Todo lo que aparece "mágicamente" en el código sale de
+ahí:
+
+| en el código | en el paper |
+|---|---|
+| umbrales `shangtan` 20/15/10 mm/día | Tabla 4 |
+| umbrales `lingzhan` 15/10/5 mm/día | Tabla 5 |
+| `sensor_id: GXZM-DB03` | GNSS GXZM-DB01–DB08 del área de Shangtan (§3.2.2) |
+| data-receiving en C#, 3 instancias | Tabla 2 |
+| data-management Spring Boot, 2 instancias | Tabla 2 |
+| early-warning en Python, 2 instancias | Tabla 2 |
+| Consul, Nginx con polling, RabbitMQ, Redis | §2.3, §2.4 |
+
+`MAX_DT_SECONDS=7200` también queda explicado: es el doble del intervalo de muestreo
+nominal.
+
+**El régimen de operación real, y el conflicto con el benchmark.** §2.2 del paper:
+*"the measurement is performed every hour by default. When the accelerated deformation of
+the landslide is detected, the sampling interval can be shortened"* — en el caso Lingzhan
+lo bajaron a 15 minutos durante la emergencia.
+
+Con los **3,233 sensores** que el sistema tenía conectados en 2019 (Figura 5):
+
+| régimen | carga total del sistema |
+|---|---|
+| 1 muestra/hora (nominal) | **0.90 mensajes/s** |
+| 1 muestra/15 min (emergencia) | **3.6 mensajes/s** |
+| crecimiento real de 2019 (9.0 M registros/año) | **0.29 mensajes/s** |
+
+**El ladder emite 400 mensajes/s de un solo sensor**: ~1.4 millones de veces la tasa por
+sensor del paper, y ~450x la carga total del sistema completo que Bai describe.
+
+Esto explica de raíz el problema de §6. Con muestreo horario, un delta de 1.25 mm produce
+30 mm/día — cruza `red` con sentido físico. Con 400 frames/s el `dt` es de milisegundos y
+cualquier ruido produce millones de mm/día. El generador no está mal calibrado por
+descuido: **opera en un régimen que el estudio base nunca contempla.**
+
+**Consecuencia para la lectura del resultado.** `SUSTAINED_RATE = 100 fps` en B no
+significa "B aguanta poco". Es **~110x la carga nominal** del sistema de Bai y **~28x su
+modo de emergencia**. Ambos sistemas exceden por dos órdenes de magnitud el caso de uso
+documentado en la literatura que replican.
+
+### 13.2. El Fellah et al. (2026) — el método experimental
+
+> *Analysis of microservices-based IoT systems: deployment challenges, industry
+> practices, and performance insights.* Internet of Things, 36, 101867.
+> doi:10.1016/j.iot.2025.101867
+
+De aquí sale el diseño del ladder: niveles de VU **1, 10, 50, 100, 400** (§5.3), carga con
+**Artillery**, CPU y memoria con **Prometheus** y **Grafana** (Tabla 6), y las métricas
+throughput / latencia / CPU / memoria. Los escalones no son arbitrarios.
+
+**Diferencias de nuestro montaje que conviene declarar:**
+
+| aspecto | El Fellah et al. | este trabajo |
+|---|---|---|
+| corridas por configuración | **3–4 independientes** | **1** |
+| estadística reportada | mediana, p90/p95/p99, IC 95% | percentiles de una corrida |
+| requests por escenario | 10,000 | hasta 240,000 |
+| hardware | Raspberry Pi 4B, 4 cores / 4 GB | 2 cores / 3.8 GB |
+| eje de comparación | **monolito vs. microservicios** | **microservicios-A vs. microservicios-B** |
+
+Las dos primeras filas son la brecha metodológica a cubrir (ver §10.6). La última es
+importante para la redacción: el eje de comparación **no es el mismo**, así que las
+conclusiones de El Fellah (throughput +134%, latencia −49%, memoria −7/13%, CPU mayor) no
+se heredan a este trabajo y conviene decirlo explícitamente.
+
+**Precedente útil.** En §6 (threats to validity) los autores reconocen que *"Scenario 2
+may suffer gateway saturation overshadowing downstream effects"* — exactamente el
+fenómeno del `pool_dispatch_failed` diagnosticado en §3.3: la saturación del punto de
+entrada enmascara el comportamiento de los servicios de aguas abajo. Es citable como
+antecedente reconocido del problema.
+
+También reconocen no aplicar tests estadísticos (Tabla 8) y no hacer análisis de ablación
+por práctica individual, ambas señaladas como limitaciones propias.
