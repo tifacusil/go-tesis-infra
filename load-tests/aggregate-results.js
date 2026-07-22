@@ -50,19 +50,31 @@ function stats(xs) {
   return { n, mean, median: median(values), sd, ci: tValue(n) * (sd / Math.sqrt(n)) };
 }
 
+const EMPTY_CPU = { mean: NaN, max: NaN, nodeMean: NaN, nodeMax: NaN, pythonMean: NaN };
+
 function readClientCpu(jsonPath) {
   const csv = jsonPath.replace(/\.json$/, '.client-cpu.csv');
-  if (!fs.existsSync(csv)) return { mean: NaN, max: NaN };
-  const values = fs
+  if (!fs.existsSync(csv)) return EMPTY_CPU;
+  // unix_ts,cpu_percent[,node_percent,python_percent] — las corridas anteriores
+  // al muestreo por proceso solo tienen la primera columna.
+  const rows = fs
     .readFileSync(csv, 'utf8')
     .split('\n')
     .slice(1)
-    .map((line) => Number(line.split(',')[1]))
-    .filter((v) => Number.isFinite(v));
-  if (values.length === 0) return { mean: NaN, max: NaN };
+    .map((line) => line.split(',').map(Number))
+    .filter((cols) => Number.isFinite(cols[1]));
+  if (rows.length === 0) return EMPTY_CPU;
+  const col = (i) => rows.map((c) => c[i]).filter((v) => Number.isFinite(v));
+  const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
+  const max = (xs) => (xs.length ? Math.max(...xs) : NaN);
+  const total = col(1);
+  const node = col(2);
   return {
-    mean: values.reduce((a, b) => a + b, 0) / values.length,
-    max: Math.max(...values),
+    mean: mean(total),
+    max: max(total),
+    nodeMean: mean(node),
+    nodeMax: max(node),
+    pythonMean: mean(col(3)),
   };
 }
 
@@ -92,6 +104,9 @@ function readRun(file) {
     p99: rtt.p99,
     clientCpuMean: cpu.mean,
     clientCpuMax: cpu.max,
+    clientNodeMean: cpu.nodeMean,
+    clientNodeMax: cpu.nodeMax,
+    clientPythonMean: cpu.pythonMean,
   };
 }
 
@@ -114,8 +129,14 @@ const FIELDS = [
   ['p90', 'RTT p90 (ms)', 1],
   ['p95', 'RTT p95 (ms)', 1],
   ['p99', 'RTT p99 (ms)', 1],
-  ['clientCpuMean', 'CPU cliente media (%)', 1],
-  ['clientCpuMax', 'CPU cliente max (%)', 1],
+  ['clientCpuMean', 'CPU cliente media (% de la máquina)', 1],
+  ['clientCpuMax', 'CPU cliente max (% de la máquina)', 1],
+  // Node es de un solo hilo: 100 = un core saturado. Es el número que decide
+  // si la corrida midió el servidor o el generador de carga; el total de la
+  // máquina no puede mostrarlo (un core de 16 son 6.25%).
+  ['clientNodeMean', 'CPU engine Node media (% de 1 core)', 1],
+  ['clientNodeMax', 'CPU engine Node max (% de 1 core)', 1],
+  ['clientPythonMean', 'CPU pool Python media (% de 1 core)', 1],
 ];
 
 function fmt(value, digits) {

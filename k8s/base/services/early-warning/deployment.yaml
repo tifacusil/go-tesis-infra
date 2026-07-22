@@ -34,15 +34,19 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            # 1 = consumo serial, el comportamiento previo al worker pool.
-            # El default del codigo es 8, pero no aporta nada mientras la carga
-            # emita un solo sensor_id (el sharding es por sensor, asi que todo
-            # cae en el mismo worker) y ademas ensancha el race sobre el
-            # baseline en Redis entre las 2 replicas: la tasa de alerta medida
-            # subio de 3.61% a 5.12% al pasar de 2 a 16 hilos.
-            # Subir esto solo tiene sentido con carga multi-sensor.
+            # Estuvo en 1 (consumo serial) mientras la carga emitia un solo
+            # sensor_id: el sharding es por sensor, asi que todo caia en el
+            # mismo worker — medido, cero mejora — y ademas ensanchaba el race
+            # sobre el baseline en Redis entre las 2 replicas, que llevo la
+            # tasa de alerta de 3.61% a 5.12% al pasar de 2 a 16 hilos.
+            #
+            # Las dos razones ya no aplican. La carga viene de una flota de
+            # DTU_SENSOR_COUNT sensores (100 por defecto), asi que el sharding
+            # tiene algo que repartir, y la escritura del baseline es un
+            # compare-and-set que no deja retroceder la lectura sin importar
+            # cuantas replicas escriban a la vez.
             - name: CONSUMER_WORKERS
-              value: "1"
+              value: "8"
           livenessProbe:
             httpGet:
               path: /health
