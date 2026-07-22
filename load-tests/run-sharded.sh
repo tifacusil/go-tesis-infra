@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 # run-sharded.sh — corre UN nivel de VU repartido entre N procesos Artillery.
 #
-# El engine de Artillery es Node, de un solo hilo. En la escalera del
-# 2026-07-22 eso puso el techo en el generador, no en el sistema: a partir de
-# ~112 fps el event loop se saturaba y aparecían `pool_dispatch_failed` — un
-# fallo del cliente que se veía igual que un rechazo del servidor (ver
-# docs/ladder-b-2026-07-22.md §2). Un solo core del cliente no alcanza para
-# empujar al sistema hasta su verdadero techo.
+# ADVERTENCIA sobre su utilidad real: se escribió creyendo que el techo del
+# generador era el event loop de Node (un solo hilo), pero Artillery v2 ya corre
+# los escenarios en worker threads repartidos entre cores — un solo `artillery
+# run` usa varios cores (medido: node_max 432%). Agregar procesos NO suma CPU;
+# solo multiplica el pool de Python, que es el cuello real: dtu-emulator abre un
+# proceso de sistema por conexión, y en Windows eso agota los recursos de socket
+# del kernel (WinError 8/10055) antes de estresar al servidor. Ver
+# docs/ladder-b-2026-07-22.md §5. Para subir el techo del cliente de verdad hace
+# falta un generador asíncrono de un solo proceso, o un cliente Linux.
 #
-# Esto lanza SHARDS procesos artillery en paralelo, cada uno con arrivalRate =
-# total/SHARDS, y le da a cada uno un rango disjunto de la flota de sensores
-# (DTU_SENSOR_BASE) para que dos procesos nunca toquen el mismo sensor. N
-# event loops en N cores empujan N veces más antes de saturarse.
+# Sigue sirviendo para lo único que hace bien: repartir la carga entre varias
+# MÁQUINAS cliente sin que se pisen los sensores (cada una con su DTU_SENSOR_BASE
+# y su rango de flota). En una sola máquina Windows, subir SHARDS empeora las
+# cosas.
+#
+# Lanza SHARDS procesos artillery en paralelo, cada uno con arrivalRate =
+# total/SHARDS y un rango disjunto de la flota (DTU_SENSOR_BASE) para que dos
+# procesos nunca toquen el mismo sensor.
 #
 # Uso:
 #   TARGET_HOST=178.105.104.95:5000 RATE=300 SHARDS=4 ./load-tests/run-sharded.sh

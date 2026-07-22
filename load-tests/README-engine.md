@@ -130,34 +130,38 @@ the fleet-scale sweep; note that at low arrival rates a large fleet means most
 frames are a sensor's *first* reading, which has no baseline to evaluate
 against and therefore never alerts.
 
-### Splitting a run across processes (`DTU_SENSOR_BASE`)
+### Splitting a run across machines (`DTU_SENSOR_BASE`)
 
-The engine is one Node process, and Node is single-threaded. On the 2026-07-22
-ladder that made the *generator* the ceiling: past ~112 fps the event loop
-saturated and threw `pool_dispatch_failed`, a client-side failure that looks
-exactly like a server rejection in Artillery's numbers (see
-`docs/ladder-b-2026-07-22.md` §2). One client core can't push the system to its
-real ceiling.
+`DTU_SENSOR_BASE` shifts this process's sensor-id range. The reading counter
+lives per process, so two processes on the same `sensor_id` would hand it the
+same `reading_index` — same timestamp, and the engine drops the duplicate
+(`dt<=0`). With disjoint bases (process *k* of *N* uses `[k·count, (k+1)·count)`)
+each sensor is written by exactly one process and its series stays intact.
 
-`run-sharded.sh` runs the same load level as N parallel `artillery` processes
-(N event loops on N cores) at `rate/N` each. The reading counter lives per
-process, so two processes on the same `sensor_id` would hand it the same
-`reading_index` — same timestamp, and the engine drops the duplicate (`dt<=0`).
-`DTU_SENSOR_BASE` shifts a process's id range so process *k* of *N* uses
-`[k·count, (k+1)·count)`; each sensor is written by exactly one process and its
-series stays intact.
+**This does not raise the throughput ceiling on a single machine — don't use it
+for that.** `run-sharded.sh` was written believing the ceiling was Node's
+single-threaded event loop, but Artillery v2 already runs scenarios in worker
+threads across cores (measured: one `artillery run` reached `node_max` 432%).
+Adding processes adds no CPU; it only multiplies the Python pool, which is the
+real client-side limit — dtu-emulator opens one OS process per connection, and
+on Windows that exhausts kernel socket resources (`WinError 8`/`10055`) before
+the server is stressed. See `docs/ladder-b-2026-07-22.md` §5. To actually raise
+the client ceiling, rewrite the generator as a single async process, or generate
+from Linux.
+
+Where it *is* useful: driving one load level from **several client machines** at
+once, each with its own `DTU_SENSOR_BASE` and fleet range, so the sensor series
+stay consistent across the whole run.
 
 ```bash
-TARGET_HOST=178.105.104.95:5000 RATE=300 SHARDS=4 ./load-tests/run-sharded.sh
+# On machine A: sensores [0,50)   ·   on machine B: DTU_SENSOR_BASE=50, [50,100)
+TARGET_HOST=178.105.104.95:5000 RATE=150 SHARDS=1 FLEET=50 ./load-tests/run-sharded.sh
 node load-tests/aggregate-sharded.js B/sharded   # throughput is the SUM of shards
 ```
 
-Watch `node max` in the aggregate: while any shard's Node process sits near
-100% of a core, that run is still measuring the generator, not the server — add
-shards. The Python pool (`POOL_PER_SHARD`) is the other client-side limit; it
-defaults to one persistent connection per frame/s, which is far more than the
-`rate·RTT` a healthy pipeline needs, so lower it if hundreds of Python
-processes start competing for the client's cores.
+`POOL_PER_SHARD` caps the Python connections per process; it defaults to
+`ceil(rate·0.4)` (roughly `rate·RTT`), because one connection per frame/s spawns
+hundreds of OS processes and thrashes the client.
 
 ## One-time / per-shell setup
 
