@@ -23,11 +23,15 @@
 #   DURATION         segundos de la fase de medición (default: 420)
 #   WARMUP           segundos de calentamiento previos (default: 60)
 #   FLEET            tamaño total de la flota, repartida entre shards (default: 100)
-#   POOL_PER_SHARD   conexiones Python persistentes por shard. Default: el rate
-#                    del shard (una por frame/s, muy conservador). El pool solo
-#                    necesita ~rate·RTT conexiones para no encolar; a RTT ~0.2s
-#                    eso es ~1/5 del rate. Bajarlo evita cientos de procesos
-#                    Python compitiendo por los 16 cores del cliente.
+#   POOL_PER_SHARD   conexiones Python persistentes por shard. Cada una es un
+#                    intérprete Python entero con su conexión TCP, así que el
+#                    total (SHARDS × POOL_PER_SHARD) es lo que puede reventar la
+#                    RAM del cliente: un intento con 4×40=160 procesos agotó la
+#                    memoria (WinError 8) y disparó un loop de respawn de >1000
+#                    procesos. El pool solo necesita ~rate·RTT conexiones para no
+#                    encolar; a RTT ~0.3s eso es ~1/3 del rate. Default:
+#                    ceil(rate_del_shard × 0.4), mínimo 4.
+#   RTT_FACTOR       fracción del rate usada para el pool default (default 0.4).
 #   SYSTEM           etiqueta de resultados (default: B)
 #   LABEL            subcarpeta bajo results/<SYSTEM>/ (default: sharded)
 #
@@ -88,7 +92,13 @@ for (( k = 0; k < SHARDS; k++ )); do
   overrides=$(printf '{"config":{"phases":[{"duration":%d,"arrivalRate":%d,"name":"warmup"},{"duration":%d,"arrivalRate":%d,"name":"measure"}]}}' \
     "$WARMUP" "$rate" "$DURATION" "$rate")
 
-  pool="${POOL_PER_SHARD:-$rate}"
+  # Pool default = rate·RTT_FACTOR (no rate): suficiente para no encolar sin
+  # abrir un intérprete Python por frame/s. Ver cabecera.
+  if [[ -n "${POOL_PER_SHARD:-}" ]]; then
+    pool="$POOL_PER_SHARD"
+  else
+    pool=$(awk -v r="$rate" -v f="${RTT_FACTOR:-0.4}" 'BEGIN{p=int(r*f); if(p<4)p=4; print p}')
+  fi
   DTU_SENSOR_COUNT="$per_shard_fleet" \
   DTU_SENSOR_BASE="$(( k * per_shard_fleet ))" \
   DTU_ENGINE_POOL_SIZE="$pool" \

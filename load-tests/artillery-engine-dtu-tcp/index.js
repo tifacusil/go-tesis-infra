@@ -63,6 +63,46 @@ const SEND_TIMEOUT_MS = (() => {
 
 const RESPAWN_DELAY_MS = 1000; // breather before replacing a dead worker, so a crash-on-start bug can't become a tight spawn storm
 
+// Global respawn circuit breaker. When the whole pool is failing — the OS
+// refusing to fork under memory pressure, or socket/handle exhaustion (WinError
+// 8 / 10055) — every dead worker becomes a fresh spawn that dies the same way,
+// and the respawns pile up faster than the OS reclaims the dead processes. A
+// real run of this left >1000 orphaned Python processes behind and exhausted
+// the client's kernel socket resources.
+//
+// A per-slot "quick death" counter does NOT catch it: under memory pressure a
+// worker often lives several seconds before dying, so it never accumulates a
+// streak and respawns forever. Instead, count respawns across ALL slots in a
+// rolling window. Isolated flaky-worker respawns stay far under the limit; a
+// pool that is cycling wholesale trips it. Once tripped, stop respawning for
+// the rest of the run — the run is already invalid, and the priority is not
+// making the machine worse.
+const RESPAWN_WINDOW_MS = 20000;
+const RESPAWN_WINDOW_MAX = 40; // ~2x a typical pool; a whole pool re-cycling exceeds this fast
+const respawnTimestamps = [];
+let respawnCircuitOpen = false;
+
+// Records a respawn and reports whether it's allowed. Trips (and latches) the
+// breaker when respawns in the last RESPAWN_WINDOW_MS exceed RESPAWN_WINDOW_MAX.
+function respawnAllowed() {
+  if (respawnCircuitOpen) return false;
+  const now = Date.now();
+  respawnTimestamps.push(now);
+  while (respawnTimestamps.length && now - respawnTimestamps[0] > RESPAWN_WINDOW_MS) {
+    respawnTimestamps.shift();
+  }
+  if (respawnTimestamps.length > RESPAWN_WINDOW_MAX) {
+    respawnCircuitOpen = true;
+    console.error(
+      `[dtu-tcp] ${respawnTimestamps.length} worker respawns in ${RESPAWN_WINDOW_MS}ms — ` +
+      `pool is thrashing (out of memory or sockets); stopping respawns. ` +
+      `Reduce the pool size (POOL_PER_SHARD / DTU_ENGINE_POOL_SIZE).`
+    );
+    return false;
+  }
+  return true;
+}
+
 const DTU_EMULATOR_PATH = path.resolve(
   process.env.DTU_EMULATOR_PATH || path.join(__dirname, '..', '..', '..', 'dtu-emulator')
 );
@@ -227,6 +267,7 @@ function spawnWorker(host, port) {
     const err = new Error(`dtu-emulator stream worker for ${host}:${port} is down (${reason})`);
     for (const entry of worker.pending.splice(0)) _settle(entry, err);
     if (worker.closing || shuttingDown) return;
+    if (!respawnAllowed()) return; // pool thrashing — see respawnAllowed
     console.error(`[dtu-tcp] ${err.message} — respawning in ${RESPAWN_DELAY_MS}ms`);
     // Deferred (and unref'd, so it can't hold the process open at shutdown):
     // an immediate respawn of a worker that dies on startup would loop as
