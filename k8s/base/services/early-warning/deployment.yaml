@@ -34,19 +34,24 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            # Estuvo en 1 (consumo serial) mientras la carga emitia un solo
-            # sensor_id: el sharding es por sensor, asi que todo caia en el
-            # mismo worker — medido, cero mejora — y ademas ensanchaba el race
-            # sobre el baseline en Redis entre las 2 replicas, que llevo la
-            # tasa de alerta de 3.61% a 5.12% al pasar de 2 a 16 hilos.
+            # 1 = consumo serial, el comportamiento previo al worker pool.
             #
-            # Las dos razones ya no aplican. La carga viene de una flota de
-            # DTU_SENSOR_COUNT sensores (100 por defecto), asi que el sharding
-            # tiene algo que repartir, y la escritura del baseline es un
-            # compare-and-set que no deja retroceder la lectura sin importar
-            # cuantas replicas escriban a la vez.
+            # Se puso en 1 porque con un solo sensor_id en la carga el sharding
+            # (que es por sensor) mandaba todo al mismo worker — medido, cero
+            # mejora — y ademas ensanchaba el race sobre el baseline en Redis
+            # entre las 2 replicas: la tasa de alerta subio de 3.61% a 5.12% al
+            # pasar de 2 a 16 hilos.
+            #
+            # Esas dos razones ya no aplican: la carga viene de una flota de
+            # DTU_SENSOR_COUNT sensores y el baseline se escribe con
+            # compare-and-set. Pero sigue en 1 porque falta la razon para
+            # subirlo: en la escalera del 2026-07-22 la cola
+            # early_warning.evaluate se mantuvo en 0 las 5 horas, o sea que
+            # early-warning nunca fue el limitante. Mientras el techo lo ponga
+            # el generador de carga (ver docs/ladder-b-2026-07-22.md §2),
+            # agregar workers cambia una variable sin poder medir su efecto.
             - name: CONSUMER_WORKERS
-              value: "8"
+              value: "1"
           livenessProbe:
             httpGet:
               path: /health
