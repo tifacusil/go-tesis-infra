@@ -78,20 +78,38 @@ por corrida). `SUSTAINED_RATE` = último nivel sin violar §1.3 de `plan-pruebas
 
 ## FASE 2 — Resiliencia (12h por sistema)
 
-Solo después de tener `SUSTAINED_RATE` de Fase 1. Carga sostenida + chaos, los
-dos juntos con `&` + `wait` en el mismo shell (el chaos coordina el timing con la
-ventana de carga: t+2h y t+6h).
+Solo después de tener `SUSTAINED_RATE` de Fase 1. Carga sostenida + chaos.
+
+**El chaos no carga el `.env` de forma confiable** (su loader interno lo
+descarta en silencio en ese proceso → muere con "SSH_ORCHESTRATOR es
+obligatorio", y sin credenciales SSH). El fix a prueba de balas: **sourcear el
+`.env` a mano** en la shell del chaos antes de lanzarlo — el proceso hereda todo
+(orchestrator, system, prometheus, credenciales SSH). El endurance sí levanta su
+config solo.
+
+Usar **dos terminales Git Bash** (más robusto que `& … & wait`: si matás una,
+no arrastrás la otra). Terminal 1 = carga; terminal 2 = chaos, arrancado apenas
+la carga entró en régimen (tras el ramp de 3 min). El chaos inyecta a t+2h y
+t+6h **desde su propio arranque**, así que un offset de pocos minutos con la
+carga no importa — la carga es plana las 12h.
+
+El bloque activo del `.env` **debe ser el del sistema que estás corriendo** —
+tanto la carga como el chaos dependen de eso.
 
 ### A  (`.env` bloque A activo)
 
+Terminal 1 — carga:
 ```
 grep -E "^SSH_HOST|^SSH_ORCHESTRATOR|^SYSTEM" load-tests/.env   # debe decir A / native
-
 TARGET_HOST=204.168.203.32:5100 SUSTAINED_RATE=100 SYSTEM=A \
-  ./load-tests/run-endurance.sh &
+  ./load-tests/run-endurance.sh
+```
+
+Terminal 2 — chaos (arrancar tras el ramp):
+```
+set -a; . load-tests/.env; set +a
 GATEWAY_URL=http://204.168.203.32/health/data-management \
-  ./chaos/run-during-endurance.sh &
-wait
+  ./chaos/run-during-endurance.sh
 ```
 
 A native → chaos inyecta solo `kill-rabbitmq` (t+2h) y `pause-data-management`
@@ -99,14 +117,18 @@ A native → chaos inyecta solo `kill-rabbitmq` (t+2h) y `pause-data-management`
 
 ### B  (editar `.env`: comentar A, descomentar B)
 
+Terminal 1 — carga:
 ```
 grep -E "^SSH_HOST|^SSH_ORCHESTRATOR|^SYSTEM" load-tests/.env   # debe decir B / k8s
-
 TARGET_HOST=178.105.104.95:5000 SUSTAINED_RATE=100 SYSTEM=B \
-  ./load-tests/run-endurance.sh &
+  ./load-tests/run-endurance.sh
+```
+
+Terminal 2 — chaos (arrancar tras el ramp):
+```
+set -a; . load-tests/.env; set +a
 GATEWAY_URL=http://178.105.104.95/api/v1/data/health \
-  ./chaos/run-during-endurance.sh &
-wait
+  ./chaos/run-during-endurance.sh
 ```
 
 B k8s → chaos inyecta los 3: `kill-rabbitmq`, `pause-data-management`,
