@@ -22,11 +22,20 @@
   "links": [],
   "panels": [
     {
+      "id": 24,
+      "type": "timeseries",
       "datasource": {
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
-      "description": "Mide: % de CPU en uso, todo el host. Como: 100 - tasa de node_cpu_seconds_total{mode=\"idle\"} (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: no es CPU del proceso del servicio (incluye SO y otras cargas del host) — usar el panel 'CPU por proceso' para comparar A vs B.",
+      "title": "Sist A - CPU por proceso (s/s)",
+      "description": "Mide: CPU real por proceso del servicio (s/s), no del host. Como: rate(process_cpu_seconds_total) por service — nativo en Micrometer (Spring) y prometheus-net (.NET); en data-analysis/Flask es un gauge psutil manual, porque MultiProcessCollector excluye el ProcessCollector nativo bajo gunicorn. Por que: atribuible al proceso especifico, comparable con Sist B sin depender de que ambos corran en el mismo hardware — a diferencia del panel 'CPU (%)' por nodo.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -78,34 +87,23 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": false
+          "showLegend": true
         },
-        "timezone": [
-          "America/Lima"
-        ],
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
       "targets": [
         {
           "datasource": {
@@ -113,122 +111,28 @@
             "uid": "P551976F00C6E392A"
           },
           "editorMode": "code",
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
-          "legendFormat": "__auto",
+          "expr": "sum by (service) (rate(process_cpu_seconds_total[1m]))",
+          "legendFormat": "{{service}}",
           "range": true,
-          "refId": "CPU (%)"
+          "refId": "A"
         }
-      ],
-      "title": "Sist A - CPU (%)",
-      "type": "timeseries"
+      ]
     },
     {
+      "id": 19,
+      "type": "timeseries",
       "datasource": {
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Mide: % de CPU en uso, todo el host. Como: 100 - tasa de node_cpu_seconds_total{mode=\"idle\"} (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: no es CPU del proceso del servicio, y A/B corren en hosts distintos — usar el panel 'CPU por proceso' para comparar A vs B.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": true,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
+      "title": "Sist B - CPU por proceso (s/s)",
+      "description": "Mide: CPU real por proceso del servicio (s/s), no del host. Como: rate(process_cpu_seconds_total) por service, expuesto via collectors.NewProcessCollector (client_golang) en los 4 servicios Go. Por que: atribuible al proceso especifico, comparable sin depender de que A y B compartan hardware — a diferencia del panel 'CPU (%)' por nodo de arriba. Pendiente el panel equivalente para A en este dashboard (Micrometer/prometheus-net/psutil ya lo exponen).",
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
         "y": 0
       },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "timezone": [
-          "America/Lima"
-        ],
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PDF96AC866106AF7C"
-          },
-          "editorMode": "code",
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Sist B - CPU (%)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P551976F00C6E392A"
-      },
-      "description": "Mide: memoria en uso, todo el host (MB). Como: node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: incluye page cache del SO y otros procesos, no solo el servicio — usar el panel 'Memoria por proceso' para comparar A vs B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -280,52 +184,52 @@
               }
             ]
           },
-          "unit": "decmbytes"
+          "unit": "short"
         },
         "overrides": []
       },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (rate(process_cpu_seconds_total[1m]))",
+          "legendFormat": "{{service}}",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P551976F00C6E392A"
+      },
+      "title": "Sist A - Memoria residente por proceso (MB)",
+      "description": "Mide: memoria residente real por proceso del servicio (MB), no del host. Como: process_resident_memory_bytes por service — nativo en Micrometer (Spring); en .NET es un alias manual de process_working_set_bytes y en data-analysis/Flask un gauge psutil, ambos para exponer el mismo nombre que usa Go. Por que: atribuible al proceso especifico, comparable con Sist B sin depender de hardware compartido.",
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
         "y": 8
       },
-      "id": 3,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "timezone": [
-          "America/Lima"
-        ],
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Sist A - Memoria (MB)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PDF96AC866106AF7C"
-      },
-      "description": "Mide: memoria en uso, todo el host (MB). Como: node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: incluye page cache del SO y otros procesos, no solo el servicio — usar el panel 'Memoria por proceso' para comparar A vs B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -381,30 +285,116 @@
         },
         "overrides": []
       },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (process_resident_memory_bytes) / 1024 / 1024",
+          "legendFormat": "{{service}}",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "Sist B - Memoria residente por proceso (MB)",
+      "description": "Mide: memoria residente real por proceso del servicio (MB), no del host. Como: process_resident_memory_bytes por service, expuesto via collectors.NewProcessCollector (client_golang). Por que: atribuible al proceso especifico, comparable sin depender de hardware compartido. Sistema A ya expone el mismo nombre (nativo en Micrometer/prometheus-net; gauge psutil manual en data-analysis por gunicorn multiproceso) — pendiente el panel equivalente para A en este dashboard.",
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
         "y": 8
       },
-      "id": 4,
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
       "options": {
         "legend": {
           "calcs": [],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
-          "showLegend": false
+          "showLegend": true
         },
-        "timezone": [
-          "America/Lima"
-        ],
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
       "targets": [
         {
           "datasource": {
@@ -412,19 +402,27 @@
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024",
-          "legendFormat": "__auto",
+          "expr": "sum by (service) (process_resident_memory_bytes) / 1024 / 1024",
+          "legendFormat": "{{service}}",
           "range": true,
           "refId": "A"
         }
-      ],
-      "title": "Sist B - Memoria (MB)",
-      "type": "timeseries"
+      ]
     },
     {
+      "id": 21,
+      "type": "timeseries",
       "datasource": {
         "type": "prometheus",
-        "uid": "P551976F00C6E392A"
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - data-management: mensajes persistidos/s",
+      "description": "Mide: mensajes persistidos/s en data-management, A vs B. Como: rate(dm_messages_processed_total) — mismo nombre de metrica en ambos (Micrometer FunctionCounter en A, client_golang en B). Por que: throughput por componente homologo con denominador comun (mismo evento, mismo punto del pipeline) — reemplaza el uso comparativo de los paneles 'Throughput agregado', que suman fenomenos heterogeneos.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
       },
       "fieldConfig": {
         "defaults": {
@@ -481,14 +479,6 @@
         },
         "overrides": []
       },
-      "description": "Mide: actividad total de Sistema A (req+msg/s). Como: suma de http_server_requests_seconds_count + ew_messages_processed_total + flask_http_request_duration_seconds_count. Por que: pulso general del sistema en el tiempo. ADVERTENCIA: suma fenomenos heterogeneos (HTTP, mensajes, distintos puntos del pipeline) sin denominador comun con el panel espejo de B — NO usar para % de mejora A vs B, solo como serie interna de A. Para comparar A vs B usar los paneles 'A vs B - <componente>'.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 16
-      },
-      "id": 5,
       "options": {
         "legend": {
           "calcs": [],
@@ -496,16 +486,12 @@
           "placement": "bottom",
           "showLegend": true
         },
-        "timezone": [
-          "America/Lima"
-        ],
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
       "targets": [
         {
           "datasource": {
@@ -513,19 +499,38 @@
             "uid": "P551976F00C6E392A"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_server_requests_seconds_count[1m])) + sum(rate(ew_messages_processed_total[1m])) + sum(rate(flask_http_request_duration_seconds_count[1m]))",
-          "legendFormat": "throughput (req+msg/s)",
+          "expr": "sum(rate(dm_messages_processed_total[1m]))",
+          "legendFormat": "Sist A",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(dm_messages_processed_total[1m]))",
+          "legendFormat": "Sist B",
+          "range": true,
+          "refId": "B"
         }
-      ],
-      "title": "Sist A - Throughput agregado (req+msg/s)",
-      "type": "timeseries"
+      ]
     },
     {
+      "id": 22,
+      "type": "timeseries",
       "datasource": {
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - early-warning: mensajes procesados/s",
+      "description": "Mide: mensajes de sensor procesados/s en early-warning, A vs B. Como: rate(ew_messages_processed_total) en A (Flask/prometheus_client) vs rate(ew_messages_consumed_total) en B (client_golang) — nombres distintos por historia de cada instrumentacion, etiquetados explicitamente en la leyenda. Por que: misma unidad de trabajo (mensaje consumido y evaluado), throughput comparable pese al nombre distinto.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
       },
       "fieldConfig": {
         "defaults": {
@@ -582,14 +587,6 @@
         },
         "overrides": []
       },
-      "description": "Mide: actividad total de Sistema B (req+msg/s). Como: suma de dm/data_receiving/ew_*_total mas cualquier *_request_duration_seconds_count. Por que: pulso general del sistema en el tiempo. ADVERTENCIA: suma fenomenos heterogeneos sin denominador comun con el panel espejo de A — NO usar para % de mejora A vs B, solo como serie interna de B. Para comparar A vs B usar los paneles 'A vs B - <componente>'.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 16
-      },
-      "id": 6,
       "options": {
         "legend": {
           "calcs": [],
@@ -597,31 +594,144 @@
           "placement": "bottom",
           "showLegend": true
         },
-        "timezone": [
-          "America/Lima"
-        ],
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
       "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(ew_messages_processed_total[1m]))",
+          "legendFormat": "Sist A (ew_messages_processed_total)",
+          "range": true,
+          "refId": "A"
+        },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "sum(rate({__name__=~\"dm_messages_processed_total|data_receiving_frames_total|ew_alerts_published_total\"}[1m])) + sum(rate({__name__=~\".*_request_duration_seconds_count\"}[1m]))",
-          "legendFormat": "throughput (req+msg/s)",
+          "expr": "sum(rate(ew_messages_consumed_total[1m]))",
+          "legendFormat": "Sist B (ew_messages_consumed_total)",
+          "range": true,
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - data-receiving: tramas recibidas/s",
+      "description": "Mide: tramas DTU procesadas/s en data-receiving, A vs B. Como: rate(data_receiving_frames_total) — mismo nombre y labels en ambos (PipelineMetrics.cs en A es espejo 1:1 del observability layer de B). Por que: throughput por componente homologo, comparable directamente sin transformacion (misma unidad de trabajo: trama DTU con result=ok|rejected).",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(data_receiving_frames_total[1m]))",
+          "legendFormat": "Sist A",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(data_receiving_frames_total[1m]))",
+          "legendFormat": "Sist B",
+          "range": true,
+          "refId": "B"
         }
-      ],
-      "title": "Sist B - Throughput agregado (req+msg/s)",
-      "type": "timeseries"
+      ]
     },
     {
       "datasource": {
@@ -713,7 +823,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 32
       },
       "id": 7,
       "options": {
@@ -872,7 +982,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 32
       },
       "id": 8,
       "options": {
@@ -939,6 +1049,131 @@
         }
       ],
       "title": "Sist B - Latencia p50/p90/p95/p99 (s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P551976F00C6E392A"
+      },
+      "description": "Mide: carga TCP de data-receiving — conexiones activas y accepts/s. Como: data_receiving_tcp_connections_active (gauge) y rate(data_receiving_tcp_connections_total), PipelineMetrics.cs (.NET), espejo 1:1 del homologo Go. Por que: equivalente Sistema A del panel de conexiones TCP de Sist B.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "accepts/s"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "reqps"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "timezone": [
+          "America/Lima"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "sum(data_receiving_tcp_connections_active)",
+          "legendFormat": "conexiones activas",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(data_receiving_tcp_connections_total[1m]))",
+          "legendFormat": "accepts/s",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Sist A - data-receiving: conexiones TCP",
       "type": "timeseries"
     },
     {
@@ -1018,8 +1253,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 32
+        "x": 12,
+        "y": 40
       },
       "id": 9,
       "options": {
@@ -1064,6 +1299,140 @@
         }
       ],
       "title": "Sist B - data-receiving: conexiones TCP",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P551976F00C6E392A"
+      },
+      "description": "Mide: tiempo de procesamiento por frame, p50/p90/p95/p99 (s). Como: histogram_quantile sobre data_receiving_frame_processing_seconds_bucket (.NET). Por que: equivalente Sist A del panel de sesion TCP de B — aca se mide por-frame en vez de accept-a-close, pero es comparable porque en este protocolo 1 conexion = 1 frame (ver artillery-engine-dtu-tcp).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "timezone": [
+          "America/Lima"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum(rate(data_receiving_frame_processing_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.90, sum(rate(data_receiving_frame_processing_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p90",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(data_receiving_frame_processing_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(data_receiving_frame_processing_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Sist A - data-receiving: duracion procesamiento frame p50-p99 (s)",
       "type": "timeseries"
     },
     {
@@ -1131,7 +1500,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 32
+        "y": 48
       },
       "id": 10,
       "options": {
@@ -1265,7 +1634,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 40
+        "y": 56
       },
       "id": 11,
       "options": {
@@ -1377,7 +1746,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 40
+        "y": 56
       },
       "id": 12,
       "options": {
@@ -1511,7 +1880,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 64
       },
       "id": 13,
       "options": {
@@ -1612,7 +1981,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 64
       },
       "id": 14,
       "options": {
@@ -1660,265 +2029,6 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P551976F00C6E392A"
-      },
-      "description": "Mide: carga TCP de data-receiving — conexiones activas y accepts/s. Como: data_receiving_tcp_connections_active (gauge) y rate(data_receiving_tcp_connections_total), PipelineMetrics.cs (.NET), espejo 1:1 del homologo Go. Por que: equivalente Sistema A del panel de conexiones TCP de Sist B.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "accepts/s"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "reqps"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 56
-      },
-      "id": 15,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "timezone": [
-          "America/Lima"
-        ],
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P551976F00C6E392A"
-          },
-          "editorMode": "code",
-          "expr": "sum(data_receiving_tcp_connections_active)",
-          "legendFormat": "conexiones activas",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P551976F00C6E392A"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(data_receiving_tcp_connections_total[1m]))",
-          "legendFormat": "accepts/s",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "Sist A - data-receiving: conexiones TCP",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P551976F00C6E392A"
-      },
-      "description": "Mide: tiempo de procesamiento por frame, p50/p90/p95/p99 (s). Como: histogram_quantile sobre data_receiving_frame_processing_seconds_bucket (.NET). Por que: equivalente Sist A del panel de sesion TCP de B — aca se mide por-frame en vez de accept-a-close, pero es comparable porque en este protocolo 1 conexion = 1 frame (ver artillery-engine-dtu-tcp).",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 56
-      },
-      "id": 16,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "timezone": [
-          "America/Lima"
-        ],
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P551976F00C6E392A"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(data_receiving_frame_processing_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p50",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P551976F00C6E392A"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.90, sum(rate(data_receiving_frame_processing_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p90",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P551976F00C6E392A"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(data_receiving_frame_processing_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p95",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P551976F00C6E392A"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(data_receiving_frame_processing_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p99",
-          "range": true,
-          "refId": "D"
-        }
-      ],
-      "title": "Sist A - data-receiving: duracion procesamiento frame p50-p99 (s)",
-      "type": "timeseries"
-    },
-    {
       "id": 17,
       "type": "state-timeline",
       "datasource": {
@@ -1931,7 +2041,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 72
       },
       "fieldConfig": {
         "defaults": {
@@ -2025,7 +2135,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 72
       },
       "fieldConfig": {
         "defaults": {
@@ -2174,20 +2284,11 @@
       ]
     },
     {
-      "id": 19,
-      "type": "timeseries",
       "datasource": {
         "type": "prometheus",
-        "uid": "PDF96AC866106AF7C"
+        "uid": "P551976F00C6E392A"
       },
-      "title": "Sist B - CPU por proceso (s/s)",
-      "description": "Mide: CPU real por proceso del servicio (s/s), no del host. Como: rate(process_cpu_seconds_total) por service, expuesto via collectors.NewProcessCollector (client_golang) en los 4 servicios Go. Por que: atribuible al proceso especifico, comparable sin depender de que A y B compartan hardware — a diferencia del panel 'CPU (%)' por nodo de arriba. Pendiente el panel equivalente para A en este dashboard (Micrometer/prometheus-net/psutil ya lo exponen).",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 72
-      },
+      "description": "Mide: % de CPU en uso, todo el host. Como: 100 - tasa de node_cpu_seconds_total{mode=\"idle\"} (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: no es CPU del proceso del servicio (incluye SO y otras cargas del host) — usar el panel 'CPU por proceso' para comparar A vs B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2239,23 +2340,135 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "percent"
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 80
+      },
+      "id": 1,
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
+        "timezone": [
+          "America/Lima"
+        ],
         "tooltip": {
           "hideZeros": false,
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "CPU (%)"
+        }
+      ],
+      "title": "Sist A - CPU (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "description": "Mide: % de CPU en uso, todo el host. Como: 100 - tasa de node_cpu_seconds_total{mode=\"idle\"} (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: no es CPU del proceso del servicio, y A/B corren en hosts distintos — usar el panel 'CPU por proceso' para comparar A vs B.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": true,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 80
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "timezone": [
+          "America/Lima"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
       "targets": [
         {
           "datasource": {
@@ -2263,28 +2476,21 @@
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "sum by (service) (rate(process_cpu_seconds_total[1m]))",
-          "legendFormat": "{{service}}",
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Sist B - CPU (%)",
+      "type": "timeseries"
     },
     {
-      "id": 20,
-      "type": "timeseries",
       "datasource": {
         "type": "prometheus",
-        "uid": "PDF96AC866106AF7C"
+        "uid": "P551976F00C6E392A"
       },
-      "title": "Sist B - Memoria residente por proceso (MB)",
-      "description": "Mide: memoria residente real por proceso del servicio (MB), no del host. Como: process_resident_memory_bytes por service, expuesto via collectors.NewProcessCollector (client_golang). Por que: atribuible al proceso especifico, comparable sin depender de hardware compartido. Sistema A ya expone el mismo nombre (nativo en Micrometer/prometheus-net; gauge psutil manual en data-analysis por gunicorn multiproceso) — pendiente el panel equivalente para A en este dashboard.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 72
-      },
+      "description": "Mide: memoria en uso, todo el host (MB). Como: node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: incluye page cache del SO y otros procesos, no solo el servicio — usar el panel 'Memoria por proceso' para comparar A vs B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2340,264 +2546,148 @@
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PDF96AC866106AF7C"
-          },
-          "editorMode": "code",
-          "expr": "sum by (service) (process_resident_memory_bytes) / 1024 / 1024",
-          "legendFormat": "{{service}}",
-          "range": true,
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 21,
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PDF96AC866106AF7C"
-      },
-      "title": "A vs B - data-management: mensajes persistidos/s",
-      "description": "Mide: mensajes persistidos/s en data-management, A vs B. Como: rate(dm_messages_processed_total) — mismo nombre de metrica en ambos (Micrometer FunctionCounter en A, client_golang en B). Por que: throughput por componente homologo con denominador comun (mismo evento, mismo punto del pipeline) — reemplaza el uso comparativo de los paneles 'Throughput agregado', que suman fenomenos heterogeneos.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 80
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P551976F00C6E392A"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(dm_messages_processed_total[1m]))",
-          "legendFormat": "Sist A",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PDF96AC866106AF7C"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(dm_messages_processed_total[1m]))",
-          "legendFormat": "Sist B",
-          "range": true,
-          "refId": "B"
-        }
-      ]
-    },
-    {
-      "id": 22,
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PDF96AC866106AF7C"
-      },
-      "title": "A vs B - early-warning: mensajes procesados/s",
-      "description": "Mide: mensajes de sensor procesados/s en early-warning, A vs B. Como: rate(ew_messages_processed_total) en A (Flask/prometheus_client) vs rate(ew_messages_consumed_total) en B (client_golang) — nombres distintos por historia de cada instrumentacion, etiquetados explicitamente en la leyenda. Por que: misma unidad de trabajo (mensaje consumido y evaluado), throughput comparable pese al nombre distinto.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 80
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P551976F00C6E392A"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(ew_messages_processed_total[1m]))",
-          "legendFormat": "Sist A (ew_messages_processed_total)",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PDF96AC866106AF7C"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(ew_messages_consumed_total[1m]))",
-          "legendFormat": "Sist B (ew_messages_consumed_total)",
-          "range": true,
-          "refId": "B"
-        }
-      ]
-    },
-    {
-      "id": 23,
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PDF96AC866106AF7C"
-      },
-      "title": "A vs B - data-receiving: tramas recibidas/s",
-      "description": "Mide: tramas DTU procesadas/s en data-receiving, A vs B. Como: rate(data_receiving_frames_total) — mismo nombre y labels en ambos (PipelineMetrics.cs en A es espejo 1:1 del observability layer de B). Por que: throughput por componente homologo, comparable directamente sin transformacion (misma unidad de trabajo: trama DTU con result=ok|rejected).",
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
         "y": 88
       },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "timezone": [
+          "America/Lima"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Sist A - Memoria (MB)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "description": "Mide: memoria en uso, todo el host (MB). Como: node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: incluye page cache del SO y otros procesos, no solo el servicio — usar el panel 'Memoria por proceso' para comparar A vs B.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 88
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "timezone": [
+          "America/Lima"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Sist B - Memoria (MB)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P551976F00C6E392A"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2653,6 +2743,14 @@
         },
         "overrides": []
       },
+      "description": "Mide: actividad total de Sistema A (req+msg/s). Como: suma de http_server_requests_seconds_count + ew_messages_processed_total + flask_http_request_duration_seconds_count. Por que: pulso general del sistema en el tiempo. ADVERTENCIA: suma fenomenos heterogeneos (HTTP, mensajes, distintos puntos del pipeline) sin denominador comun con el panel espejo de B — NO usar para % de mejora A vs B, solo como serie interna de A. Para comparar A vs B usar los paneles 'A vs B - <componente>'.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 96
+      },
+      "id": 5,
       "options": {
         "legend": {
           "calcs": [],
@@ -2660,12 +2758,16 @@
           "placement": "bottom",
           "showLegend": true
         },
+        "timezone": [
+          "America/Lima"
+        ],
         "tooltip": {
           "hideZeros": false,
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
+      "pluginVersion": "12.0.2",
       "targets": [
         {
           "datasource": {
@@ -2673,23 +2775,115 @@
             "uid": "P551976F00C6E392A"
           },
           "editorMode": "code",
-          "expr": "sum(rate(data_receiving_frames_total[1m]))",
-          "legendFormat": "Sist A",
+          "expr": "sum(rate(http_server_requests_seconds_count[1m])) + sum(rate(ew_messages_processed_total[1m])) + sum(rate(flask_http_request_duration_seconds_count[1m]))",
+          "legendFormat": "throughput (req+msg/s)",
           "range": true,
           "refId": "A"
+        }
+      ],
+      "title": "Sist A - Throughput agregado (req+msg/s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
         },
+        "overrides": []
+      },
+      "description": "Mide: actividad total de Sistema B (req+msg/s). Como: suma de dm/data_receiving/ew_*_total mas cualquier *_request_duration_seconds_count. Por que: pulso general del sistema en el tiempo. ADVERTENCIA: suma fenomenos heterogeneos sin denominador comun con el panel espejo de A — NO usar para % de mejora A vs B, solo como serie interna de B. Para comparar A vs B usar los paneles 'A vs B - <componente>'.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 96
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "timezone": [
+          "America/Lima"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "sum(rate(data_receiving_frames_total[1m]))",
-          "legendFormat": "Sist B",
+          "expr": "sum(rate({__name__=~\"dm_messages_processed_total|data_receiving_frames_total|ew_alerts_published_total\"}[1m])) + sum(rate({__name__=~\".*_request_duration_seconds_count\"}[1m]))",
+          "legendFormat": "throughput (req+msg/s)",
           "range": true,
-          "refId": "B"
+          "refId": "A"
         }
-      ]
+      ],
+      "title": "Sist B - Throughput agregado (req+msg/s)",
+      "type": "timeseries"
     }
   ],
   "preload": false,
