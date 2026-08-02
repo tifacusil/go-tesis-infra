@@ -26,6 +26,7 @@
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
+      "description": "node_cpu_seconds_total es CPU del HOST completo (node_exporter), no del proceso del servicio: incluye SO, otros procesos y (si el datasource comparte host con otro componente) su carga tambien. Solo es atribuible al servicio si Sist A y Sist B corren en hardware aislado y dedicado uno a uno; si comparten nodo con otras cargas, este numero esta confundido y no debe usarse para el claim de mejora de CPU. Preferir process_cpu_seconds_total por servicio cuando este disponible.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -126,6 +127,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
+      "description": "node_cpu_seconds_total es CPU del HOST completo (node_exporter), no del proceso del servicio. Solo comparable con el panel equivalente de Sist A si ambos nodos son hardware dedicado y equivalente; si hay diferencia de hardware entre A y B, el numero esta confundido con capacidad de maquina, no con eficiencia del servicio.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -226,6 +228,7 @@
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
+      "description": "node_memory_Mem{Total,Available}_bytes es memoria del HOST completo, no del proceso del servicio: incluye page cache del SO y cualquier otro proceso corriendo ahi. Solo comparable con Sist B si ambos nodos son hardware dedicado equivalente; con hosts distintos, el MB absoluto mezcla capacidad de maquina con consumo real del servicio. Preferir process_resident_memory_bytes por servicio cuando este disponible.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -322,6 +325,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
+      "description": "node_memory_Mem{Total,Available}_bytes es memoria del HOST completo, no del proceso del servicio: incluye page cache del SO y cualquier otro proceso corriendo ahi. Solo comparable con Sist A si ambos nodos son hardware dedicado equivalente; con hosts distintos, el MB absoluto mezcla capacidad de maquina con consumo real del servicio. Preferir process_resident_memory_bytes por servicio cuando este disponible.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -477,6 +481,7 @@
         },
         "overrides": []
       },
+      "description": "ADVERTENCIA: esta suma no tiene denominador comun con el panel 'Sist B - Throughput agregado'. Aqui se suman peticiones HTTP (Spring Actuator), mensajes procesados por early-warning y peticiones Flask; en B se suman mensajes persistidos, tramas TCP recibidas y alertas publicadas. Son conteos de fenomenos distintos en puntos distintos del pipeline, no la misma unidad de trabajo. NO usar este numero para calcular un % de mejora de throughput A vs B. Sirve solo como indicador interno de actividad del propio Sistema A a lo largo del tiempo.\n\nPara comparar A vs B usar los paneles 'A vs B - <componente>: .../s' (mas abajo en el dashboard): data-management (dm_messages_processed_total, mismo nombre en ambos), early-warning (ew_messages_processed_total en A vs ew_messages_consumed_total en B, misma unidad de trabajo) y data-receiving (data_receiving_frames_total, mismo nombre en ambos) — esos si tienen denominador comun.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -577,6 +582,7 @@
         },
         "overrides": []
       },
+      "description": "ADVERTENCIA: esta suma no tiene denominador comun con el panel 'Sist A - Throughput agregado'. Aqui se suman mensajes persistidos por data-management, tramas TCP recibidas y alertas publicadas (mas cualquier *_request_duration_seconds_count); en A se suman peticiones HTTP y mensajes de early-warning. Son conteos de fenomenos distintos en puntos distintos del pipeline. NO usar este numero para calcular un % de mejora de throughput A vs B. Sirve solo como indicador interno de actividad del propio Sistema B a lo largo del tiempo.\n\nPara comparar A vs B usar los paneles 'A vs B - <componente>: .../s' (mas abajo en el dashboard): data-management (dm_messages_processed_total, mismo nombre en ambos), early-warning (ew_messages_processed_total en A vs ew_messages_consumed_total en B, misma unidad de trabajo) y data-receiving (data_receiving_frames_total, mismo nombre en ambos) — esos si tienen denominador comun.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -622,7 +628,7 @@
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
-      "description": "Latencia end-to-end de las peticiones HTTP, medida automáticamente por el framework (Spring Boot Actuator / Flask) en cada endpoint. Los tiempos se agrupan en cubetas (histogram) y Prometheus calcula los percentiles vía histogram_quantile. Cobertura completa: todo el tráfico HTTP del servicio queda instrumentado sin intervención manual del desarrollador.",
+      "description": "Latencia end-to-end de las peticiones HTTP, medida automáticamente por el framework (Spring Boot Actuator / Flask) en cada endpoint. Los tiempos se agrupan en cubetas (histogram) y Prometheus calcula los percentiles vía histogram_quantile. Cobertura completa: todo el tráfico HTTP del servicio queda instrumentado sin intervención manual del desarrollador.\n\nADVERTENCIA: los buckets de Micrometer (http_server_requests_seconds) y de Flask (flask_http_request_duration_seconds) no son necesariamente los mismos cortes, y ademas esta mezclado con el panel equivalente de B que usa los buckets del cliente Prometheus de Go. histogram_quantile interpola linealmente DENTRO de cada bucket, asi que percentiles calculados sobre configuraciones de buckets distintas no son estrictamente comparables entre A y B aunque el numero final se vea parecido. Usar como orden de magnitud, no como comparacion exacta punto a punto.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -781,7 +787,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Latencia de requests HTTP agregada de los 4 servicios REST del sistema (data-management, project-management, user-management, early-warning), vía middleware genérico que envuelve cada router completo — cobertura garantizada, no instrumentación manual por ruta. Todos comparten el mismo nombre de métrica (http_request_duration_seconds) para poder agregarse en un solo cálculo de percentiles vía histogram_quantile. Excluye la duración de sesión TCP de data-receiving (panel separado: \"data-receiving: duración sesión TCP\"), porque mide algo distinto — una sesión completa, no una operación puntual — y mezclarlo distorsionaría el percentil.",
+      "description": "Latencia de requests HTTP agregada de los 4 servicios REST del sistema (data-management, project-management, user-management, early-warning), vía middleware genérico que envuelve cada router completo — cobertura garantizada, no instrumentación manual por ruta. Todos comparten el mismo nombre de métrica (http_request_duration_seconds) para poder agregarse en un solo cálculo de percentiles vía histogram_quantile. Excluye la duración de sesión TCP de data-receiving (panel separado: \"data-receiving: duración sesión TCP\"), porque mide algo distinto — una sesión completa, no una operación puntual — y mezclarlo distorsionaría el percentil.\n\nADVERTENCIA: comparar estos percentiles con el panel equivalente de A (Micrometer/Flask) es solo una aproximacion de orden de magnitud, no un dato exacto — cada instrumentacion define sus propios cortes de bucket y histogram_quantile interpola distinto segun esos cortes.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1199,7 +1205,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Solo Sistema B. Tasa de RPCs por grpc_code: OK = exito, cualquier otro code = fallo (UNAVAILABLE, INTERNAL, etc). No hay 'paquetes drop' en gRPC (concepto de TCP crudo); el equivalente es un RPC que termina en un code distinto de OK.",
+      "description": "Solo Sistema B. Tasa de RPCs por grpc_code: OK = exito, cualquier otro code = fallo (UNAVAILABLE, INTERNAL, etc). No hay 'paquetes drop' en gRPC (concepto de TCP crudo); el equivalente es un RPC que termina en un code distinto de OK.\n\nLa query usa `OR on() vector(0)` para que la serie de error exista como 0 explicito cuando no hay fallos, en vez de desaparecer del panel (un filtro `> 0` hace indistinguibles 'cero errores' de 'sin datos').",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1297,7 +1303,7 @@
             "uid": "PDF96AC866106AF7C"
           },
           "editorMode": "code",
-          "expr": "sum by (grpc_code) (rate(grpc_server_handled_total{grpc_code!=\"OK\"}[5m]) > 0)",
+          "expr": "sum by (grpc_code) (rate(grpc_server_handled_total{grpc_code!=\"OK\"}[5m])) OR on() vector(0)",
           "legendFormat": "error {{grpc_code}}",
           "range": true,
           "refId": "B"
@@ -2162,6 +2168,524 @@
           "editorMode": "code",
           "expr": "max(ew_circuit_breaker_state{target=\"data-analysis\"})",
           "legendFormat": "breaker (0/1/2)",
+          "range": true,
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "Sist B - CPU por proceso (s/s)",
+      "description": "CPU real del proceso del servicio (process_cpu_seconds_total, expuesto via prometheus/client_golang collectors.NewProcessCollector en internal/observability/metrics.go de go-data-receiving y equivalentes en los demas servicios Go). A diferencia de los paneles 'Sist B - CPU (%)' de arriba (node_cpu_seconds_total, todo el host), esta metrica es atribuible al proceso especifico y es comparable entre servicios sin depender de que A y B compartan hardware. Aun no existe el panel equivalente para Sistema A: pendiente confirmar si Spring/Flask exponen process_cpu_usage / psutil por proceso en ese repo.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (rate(process_cpu_seconds_total[1m]))",
+          "legendFormat": "{{service}}",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "Sist B - Memoria residente por proceso (MB)",
+      "description": "Memoria real del proceso del servicio (process_resident_memory_bytes, expuesto via prometheus/client_golang collectors.NewProcessCollector). A diferencia de los paneles 'Sist B - Memoria (MB)' de arriba (node_memory_*, todo el host), esta metrica es atribuible al proceso especifico y es comparable entre servicios sin depender de que A y B compartan hardware. Sistema A ya expone el mismo nombre de metrica (Micrometer y prometheus-net lo hacen nativo; en data-analysis/Flask con gunicorn multiproceso se agrego un gauge psutil manual porque MultiProcessCollector excluye el ProcessCollector nativo) — pendiente agregar el panel equivalente para A en este dashboard.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (process_resident_memory_bytes) / 1024 / 1024",
+          "legendFormat": "{{service}}",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - data-management: mensajes persistidos/s",
+      "description": "Throughput por componente homologo, NO agregado heterogeneo (reemplaza el uso comparativo de los paneles 'Throughput agregado' de arriba, que suman fenomenos distintos y no tienen denominador comun entre A y B).\n\ndm_messages_processed_total es el MISMO nombre de metrica en ambos sistemas por diseno: Sist A lo expone via Micrometer Counter.builder(\"dm.messages.processed\") (data-management-demo, Java), Sist B via prometheus/client_golang (go-data-management). Misma unidad de trabajo (un mensaje RabbitMQ persistido con exito) medida en el mismo punto del pipeline en ambos sistemas, asi que la razon B/A aqui SI es un throughput comparable.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 80
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(dm_messages_processed_total[1m]))",
+          "legendFormat": "Sist A",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(dm_messages_processed_total[1m]))",
+          "legendFormat": "Sist B",
+          "range": true,
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - early-warning: mensajes procesados/s",
+      "description": "Throughput por componente homologo. Nombres de metrica DISTINTOS por historia de cada instrumentacion pero misma unidad de trabajo (un mensaje de sensor consumido y evaluado por early-warning): Sist A expone ew_messages_processed_total (Flask/prometheus_client, early-warning-demo), Sist B expone ew_messages_consumed_total (client_golang, go-early-warning). Se etiquetan explicitamente en la leyenda para que no se lean como la misma serie con un alias — son dos metricas distintas unidas solo porque miden el mismo evento del pipeline.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 80
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(ew_messages_processed_total[1m]))",
+          "legendFormat": "Sist A (ew_messages_processed_total)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(ew_messages_consumed_total[1m]))",
+          "legendFormat": "Sist B (ew_messages_consumed_total)",
+          "range": true,
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - data-receiving: tramas recibidas/s",
+      "description": "Throughput por componente homologo. data_receiving_frames_total es el MISMO nombre de metrica en ambos sistemas por diseno: PipelineMetrics.cs (data-receiving-module-csharp, Sist A) es un espejo 1:1 del observability layer de go-data-receiving (Sist B) — mismos nombres, labels y unidad de trabajo (una trama DTU procesada, con label result=ok|rejected). Comparable directamente sin transformacion.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 88
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(data_receiving_frames_total[1m]))",
+          "legendFormat": "Sist A",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(data_receiving_frames_total[1m]))",
+          "legendFormat": "Sist B",
           "range": true,
           "refId": "B"
         }
