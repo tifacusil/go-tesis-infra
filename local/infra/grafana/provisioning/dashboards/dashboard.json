@@ -26,7 +26,7 @@
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
-      "description": "node_cpu_seconds_total es CPU del HOST completo (node_exporter), no del proceso del servicio: incluye SO, otros procesos y (si el datasource comparte host con otro componente) su carga tambien. Solo es atribuible al servicio si Sist A y Sist B corren en hardware aislado y dedicado uno a uno; si comparten nodo con otras cargas, este numero esta confundido y no debe usarse para el claim de mejora de CPU. Preferir process_cpu_seconds_total por servicio cuando este disponible.",
+      "description": "Mide: % de CPU en uso, todo el host. Como: 100 - tasa de node_cpu_seconds_total{mode=\"idle\"} (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: no es CPU del proceso del servicio (incluye SO y otras cargas del host) — usar el panel 'CPU por proceso' para comparar A vs B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -127,7 +127,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "node_cpu_seconds_total es CPU del HOST completo (node_exporter), no del proceso del servicio. Solo comparable con el panel equivalente de Sist A si ambos nodos son hardware dedicado y equivalente; si hay diferencia de hardware entre A y B, el numero esta confundido con capacidad de maquina, no con eficiencia del servicio.",
+      "description": "Mide: % de CPU en uso, todo el host. Como: 100 - tasa de node_cpu_seconds_total{mode=\"idle\"} (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: no es CPU del proceso del servicio, y A/B corren en hosts distintos — usar el panel 'CPU por proceso' para comparar A vs B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -228,7 +228,7 @@
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
-      "description": "node_memory_Mem{Total,Available}_bytes es memoria del HOST completo, no del proceso del servicio: incluye page cache del SO y cualquier otro proceso corriendo ahi. Solo comparable con Sist B si ambos nodos son hardware dedicado equivalente; con hosts distintos, el MB absoluto mezcla capacidad de maquina con consumo real del servicio. Preferir process_resident_memory_bytes por servicio cuando este disponible.",
+      "description": "Mide: memoria en uso, todo el host (MB). Como: node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: incluye page cache del SO y otros procesos, no solo el servicio — usar el panel 'Memoria por proceso' para comparar A vs B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -325,7 +325,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "node_memory_Mem{Total,Available}_bytes es memoria del HOST completo, no del proceso del servicio: incluye page cache del SO y cualquier otro proceso corriendo ahi. Solo comparable con Sist A si ambos nodos son hardware dedicado equivalente; con hosts distintos, el MB absoluto mezcla capacidad de maquina con consumo real del servicio. Preferir process_resident_memory_bytes por servicio cuando este disponible.",
+      "description": "Mide: memoria en uso, todo el host (MB). Como: node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: incluye page cache del SO y otros procesos, no solo el servicio — usar el panel 'Memoria por proceso' para comparar A vs B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -481,7 +481,7 @@
         },
         "overrides": []
       },
-      "description": "ADVERTENCIA: esta suma no tiene denominador comun con el panel 'Sist B - Throughput agregado'. Aqui se suman peticiones HTTP (Spring Actuator), mensajes procesados por early-warning y peticiones Flask; en B se suman mensajes persistidos, tramas TCP recibidas y alertas publicadas. Son conteos de fenomenos distintos en puntos distintos del pipeline, no la misma unidad de trabajo. NO usar este numero para calcular un % de mejora de throughput A vs B. Sirve solo como indicador interno de actividad del propio Sistema A a lo largo del tiempo.\n\nPara comparar A vs B usar los paneles 'A vs B - <componente>: .../s' (mas abajo en el dashboard): data-management (dm_messages_processed_total, mismo nombre en ambos), early-warning (ew_messages_processed_total en A vs ew_messages_consumed_total en B, misma unidad de trabajo) y data-receiving (data_receiving_frames_total, mismo nombre en ambos) — esos si tienen denominador comun.",
+      "description": "Mide: actividad total de Sistema A (req+msg/s). Como: suma de http_server_requests_seconds_count + ew_messages_processed_total + flask_http_request_duration_seconds_count. Por que: pulso general del sistema en el tiempo. ADVERTENCIA: suma fenomenos heterogeneos (HTTP, mensajes, distintos puntos del pipeline) sin denominador comun con el panel espejo de B — NO usar para % de mejora A vs B, solo como serie interna de A. Para comparar A vs B usar los paneles 'A vs B - <componente>'.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -582,7 +582,7 @@
         },
         "overrides": []
       },
-      "description": "ADVERTENCIA: esta suma no tiene denominador comun con el panel 'Sist A - Throughput agregado'. Aqui se suman mensajes persistidos por data-management, tramas TCP recibidas y alertas publicadas (mas cualquier *_request_duration_seconds_count); en A se suman peticiones HTTP y mensajes de early-warning. Son conteos de fenomenos distintos en puntos distintos del pipeline. NO usar este numero para calcular un % de mejora de throughput A vs B. Sirve solo como indicador interno de actividad del propio Sistema B a lo largo del tiempo.\n\nPara comparar A vs B usar los paneles 'A vs B - <componente>: .../s' (mas abajo en el dashboard): data-management (dm_messages_processed_total, mismo nombre en ambos), early-warning (ew_messages_processed_total en A vs ew_messages_consumed_total en B, misma unidad de trabajo) y data-receiving (data_receiving_frames_total, mismo nombre en ambos) — esos si tienen denominador comun.",
+      "description": "Mide: actividad total de Sistema B (req+msg/s). Como: suma de dm/data_receiving/ew_*_total mas cualquier *_request_duration_seconds_count. Por que: pulso general del sistema en el tiempo. ADVERTENCIA: suma fenomenos heterogeneos sin denominador comun con el panel espejo de A — NO usar para % de mejora A vs B, solo como serie interna de B. Para comparar A vs B usar los paneles 'A vs B - <componente>'.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -628,7 +628,7 @@
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
-      "description": "Latencia end-to-end de las peticiones HTTP, medida automáticamente por el framework (Spring Boot Actuator / Flask) en cada endpoint. Los tiempos se agrupan en cubetas (histogram) y Prometheus calcula los percentiles vía histogram_quantile. Cobertura completa: todo el tráfico HTTP del servicio queda instrumentado sin intervención manual del desarrollador.\n\nADVERTENCIA: los buckets de Micrometer (http_server_requests_seconds) y de Flask (flask_http_request_duration_seconds) no son necesariamente los mismos cortes, y ademas esta mezclado con el panel equivalente de B que usa los buckets del cliente Prometheus de Go. histogram_quantile interpola linealmente DENTRO de cada bucket, asi que percentiles calculados sobre configuraciones de buckets distintas no son estrictamente comparables entre A y B aunque el numero final se vea parecido. Usar como orden de magnitud, no como comparacion exacta punto a punto.",
+      "description": "Mide: latencia HTTP end-to-end, p50/p90/p95/p99 (s). Como: histogram_quantile sobre http_server_requests_seconds_bucket (Micrometer) + flask_http_request_duration_seconds_bucket (Flask), instrumentacion automatica del framework en cada endpoint. Por que: cobertura completa sin instrumentar handler por handler. Buckets alineados con B (5ms..5s) — percentiles comparables entre sistemas.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -787,7 +787,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Latencia de requests HTTP agregada de los 4 servicios REST del sistema (data-management, project-management, user-management, early-warning), vía middleware genérico que envuelve cada router completo — cobertura garantizada, no instrumentación manual por ruta. Todos comparten el mismo nombre de métrica (http_request_duration_seconds) para poder agregarse en un solo cálculo de percentiles vía histogram_quantile. Excluye la duración de sesión TCP de data-receiving (panel separado: \"data-receiving: duración sesión TCP\"), porque mide algo distinto — una sesión completa, no una operación puntual — y mezclarlo distorsionaría el percentil.\n\nADVERTENCIA: comparar estos percentiles con el panel equivalente de A (Micrometer/Flask) es solo una aproximacion de orden de magnitud, no un dato exacto — cada instrumentacion define sus propios cortes de bucket y histogram_quantile interpola distinto segun esos cortes.",
+      "description": "Mide: latencia HTTP end-to-end, p50/p90/p95/p99 (s), de los 4 servicios REST Go. Como: histogram_quantile sobre http_request_duration_seconds_bucket, mismo nombre de metrica en los 4 vía middleware que envuelve cada router. Por que: cobertura completa sin instrumentar handler por handler; buckets alineados con A (5ms..5s) → percentiles comparables. Excluye data-receiving (sesion TCP, no request HTTP — panel propio).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -946,7 +946,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "El transporte de data-receiving es TCP (frames de sensores), no HTTP: no aplica el middleware genérico de arriba. Este panel es su equivalente de throughput/carga — conexiones activas concurrentes y tasa de aceptación (accepts/s) — instrumentado directamente en el accept-loop (ConnOpened/ConnClosed), garantizado por diseño, no opcional.",
+      "description": "Mide: carga TCP de data-receiving — conexiones activas y accepts/s. Como: data_receiving_tcp_connections_active (gauge) y rate(data_receiving_tcp_connections_opened_total), instrumentados en el accept-loop (ConnOpened/ConnClosed). Por que: data-receiving es TCP puro, no HTTP — este es su equivalente de throughput/carga.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1071,7 +1071,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Cuánto vive una conexión TCP entre accept y close. Es el \"tiempo de respuesta\" de este servicio, pero a nivel de sesión completa (puede incluir varios frames), no de request individual — por eso vive en panel propio y no se mezcla con la latencia HTTP agregada de arriba.",
+      "description": "Mide: duracion de sesion TCP (accept→close), p50/p90/p95/p99 (s). Como: histogram_quantile sobre data_receiving_tcp_connection_duration_seconds_bucket. Por que: es el \"tiempo de respuesta\" de data-receiving, pero a nivel de sesion completa (puede incluir varios frames) — no comparable con latencia HTTP por request, por eso vive en panel propio.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1205,7 +1205,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Solo Sistema B. Tasa de RPCs por grpc_code: OK = exito, cualquier otro code = fallo (UNAVAILABLE, INTERNAL, etc). No hay 'paquetes drop' en gRPC (concepto de TCP crudo); el equivalente es un RPC que termina en un code distinto de OK.\n\nLa query usa `OR on() vector(0)` para que la serie de error exista como 0 explicito cuando no hay fallos, en vez de desaparecer del panel (un filtro `> 0` hace indistinguibles 'cero errores' de 'sin datos').",
+      "description": "Mide: tasa de RPCs por grpc_code (req/s), OK vs error. Como: rate(grpc_server_handled_total) por code, con `OR on() vector(0)` para que la serie de error exista en 0 explicito. Por que: gRPC no tiene 'paquetes drop'; un RPC con code != OK es el equivalente. Solo Sistema B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1317,7 +1317,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Solo Sistema B. Latencia de RPCs gRPC (ReadingService de data-management) via el interceptor go-grpc-middleware/prometheus, mismo mecanismo histogram_quantile que los demas paneles de latencia.",
+      "description": "Mide: latencia de RPCs gRPC (ReadingService), p50/p90/p95/p99 (s). Como: histogram_quantile sobre grpc_server_handling_seconds_bucket, via interceptor go-grpc-middleware/prometheus. Por que: unico canal sincrono entre servicios de B; sin equivalente en A (no usa gRPC). Solo Sistema B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1451,7 +1451,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Solo Sistema B. Backpressure de ingesta: entradas en sensor_buffer:* (Redis) pendientes de publisher confirm de RabbitMQ. Un crecimiento sostenido (no drena entre pasadas del RetryWorker) indica que la tasa de llegada supera lo que el broker/consumidores pueden absorber.",
+      "description": "Mide: backlog de ingesta pendiente. Como: data_receiving_redis_buffer_pending, entradas sensor_buffer:* aun sin publisher confirm de RabbitMQ. Por que: crecimiento sostenido (sin drenar entre pasadas del RetryWorker) indica que la tasa de llegada supera lo que el broker puede absorber. Solo Sistema B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1552,7 +1552,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Solo Sistema B. Profundidad de las colas consumidoras en RabbitMQ (mensajes listos para consumir, via rabbitmq-exporter), desglosada por cola: data_management.persist y early_warning.evaluate (ambas alimentadas por el exchange sensors.raw — sensors.raw NO es una cola, no tiene profundidad propia). Un crecimiento sostenido en alguna indica que ese consumidor (data-management o early-warning) no drena al ritmo de publicacion — el cuello de botella real de la ingesta.",
+      "description": "Mide: profundidad de colas consumidoras (mensajes listos) y mensajes sin ack. Como: rabbitmq_queue_messages_ready por cola (data_management.persist, early_warning.evaluate) + rabbitmq_channel_messages_unacked, via rabbitmq-exporter. Por que: crecimiento sostenido indica que ese consumidor no drena al ritmo de publicacion — cuello de botella real de la ingesta. Solo Sistema B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1664,7 +1664,7 @@
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
-      "description": "Equivalente Sistema A del panel de conexiones TCP de data-receiving (Sist B).",
+      "description": "Mide: carga TCP de data-receiving — conexiones activas y accepts/s. Como: data_receiving_tcp_connections_active (gauge) y rate(data_receiving_tcp_connections_total), PipelineMetrics.cs (.NET), espejo 1:1 del homologo Go. Por que: equivalente Sistema A del panel de conexiones TCP de Sist B.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1789,7 +1789,7 @@
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
-      "description": "Equivalente Sistema A del panel de duración de sesión TCP de data-receiving (Sist B). El .NET nativo no mide accept-a-close como sesión completa, sino tiempo de procesamiento por frame (data_receiving_frame_processing_seconds_bucket) — comparable en este protocolo porque cada conexión TCP transporta un único frame (ver artillery-engine-dtu-tcp: un `send` = una conexión = un frame).",
+      "description": "Mide: tiempo de procesamiento por frame, p50/p90/p95/p99 (s). Como: histogram_quantile sobre data_receiving_frame_processing_seconds_bucket (.NET). Por que: equivalente Sist A del panel de sesion TCP de B — aca se mide por-frame en vez de accept-a-close, pero es comparable porque en este protocolo 1 conexion = 1 frame (ver artillery-engine-dtu-tcp).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1926,7 +1926,7 @@
         "uid": "PDF96AC866106AF7C"
       },
       "title": "Sist B - Circuit breaker: estado (EW -> data-analysis)",
-      "description": "Estado del breaker de Early Warning hacia data-analysis (CLAUDE.md 2.3). 0=closed 1=open 2=half_open.\n\nOJO al leer huecos: ew_circuit_breaker_state es un GaugeVec y su unico setter esta en el path de /reports/generate. Los hijos de un GaugeVec se crean lazy, asi que la serie NO EXISTE hasta que llega el primer request de reporte. Un hueco aca significa 'nadie pidio un reporte', NO 'el breaker estaba sano'. La carga de endurance solo empuja frames por TCP y nunca toca ese path: durante una corrida limpia este panel queda vacio salvo en las ventanas de chaos, que generan trafico de reportes.\n\nEl Sistema A no tiene panel equivalente porque no tiene circuit breaker: esa ausencia es el resultado a comparar, no un panel faltante.",
+      "description": "Mide: estado del circuit breaker Early Warning → data-analysis (CLAUDE.md 2.3), 0=closed 1=open 2=half_open. Como: gauge ew_circuit_breaker_state, seteado solo en el path /reports/generate. Por que: verificar degradacion controlada bajo fallos del ML service. ADVERTENCIA: la serie es lazy (GaugeVec) — un hueco significa 'sin trafico de reportes', no 'breaker sano'; en corridas de endurance (solo TCP) queda vacio salvo en ventanas de chaos. Sin equivalente en A (no tiene breaker) por diseno.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2020,7 +2020,7 @@
         "uid": "PDF96AC866106AF7C"
       },
       "title": "Sist B - Continuidad operativa: alertas vs breaker",
-      "description": "Evidencia de CLAUDE.md 2.3: con el circuito ABIERTO, Early Warning debe seguir emitiendo alarmas por umbral simple (degradacion, no corte). Si 'alertas/s' cae a 0 mientras 'breaker' vale 1, la continuidad operativa NO se cumple.\n\nEl breaker se dibuja en el eje derecho con la misma escala 0/1/2 del panel de al lado. Vale la misma advertencia: sin trafico de reportes la serie del breaker no existe.",
+      "description": "Mide: alertas/s vs estado del breaker (0/1/2, eje derecho). Como: rate(ew_alerts_published_total) + max(ew_circuit_breaker_state). Por que: verificar CLAUDE.md 2.3 — con breaker=1 (open), 'alertas/s' no debe caer a 0 (degradacion a umbral simple, no corte). Misma advertencia de huecos que el panel de al lado.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2181,7 +2181,7 @@
         "uid": "PDF96AC866106AF7C"
       },
       "title": "Sist B - CPU por proceso (s/s)",
-      "description": "CPU real del proceso del servicio (process_cpu_seconds_total, expuesto via prometheus/client_golang collectors.NewProcessCollector en internal/observability/metrics.go de go-data-receiving y equivalentes en los demas servicios Go). A diferencia de los paneles 'Sist B - CPU (%)' de arriba (node_cpu_seconds_total, todo el host), esta metrica es atribuible al proceso especifico y es comparable entre servicios sin depender de que A y B compartan hardware. Aun no existe el panel equivalente para Sistema A: pendiente confirmar si Spring/Flask exponen process_cpu_usage / psutil por proceso en ese repo.",
+      "description": "Mide: CPU real por proceso del servicio (s/s), no del host. Como: rate(process_cpu_seconds_total) por service, expuesto via collectors.NewProcessCollector (client_golang) en los 4 servicios Go. Por que: atribuible al proceso especifico, comparable sin depender de que A y B compartan hardware — a diferencia del panel 'CPU (%)' por nodo de arriba. Pendiente el panel equivalente para A en este dashboard (Micrometer/prometheus-net/psutil ya lo exponen).",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2278,7 +2278,7 @@
         "uid": "PDF96AC866106AF7C"
       },
       "title": "Sist B - Memoria residente por proceso (MB)",
-      "description": "Memoria real del proceso del servicio (process_resident_memory_bytes, expuesto via prometheus/client_golang collectors.NewProcessCollector). A diferencia de los paneles 'Sist B - Memoria (MB)' de arriba (node_memory_*, todo el host), esta metrica es atribuible al proceso especifico y es comparable entre servicios sin depender de que A y B compartan hardware. Sistema A ya expone el mismo nombre de metrica (Micrometer y prometheus-net lo hacen nativo; en data-analysis/Flask con gunicorn multiproceso se agrego un gauge psutil manual porque MultiProcessCollector excluye el ProcessCollector nativo) — pendiente agregar el panel equivalente para A en este dashboard.",
+      "description": "Mide: memoria residente real por proceso del servicio (MB), no del host. Como: process_resident_memory_bytes por service, expuesto via collectors.NewProcessCollector (client_golang). Por que: atribuible al proceso especifico, comparable sin depender de hardware compartido. Sistema A ya expone el mismo nombre (nativo en Micrometer/prometheus-net; gauge psutil manual en data-analysis por gunicorn multiproceso) — pendiente el panel equivalente para A en este dashboard.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2375,7 +2375,7 @@
         "uid": "PDF96AC866106AF7C"
       },
       "title": "A vs B - data-management: mensajes persistidos/s",
-      "description": "Throughput por componente homologo, NO agregado heterogeneo (reemplaza el uso comparativo de los paneles 'Throughput agregado' de arriba, que suman fenomenos distintos y no tienen denominador comun entre A y B).\n\ndm_messages_processed_total es el MISMO nombre de metrica en ambos sistemas por diseno: Sist A lo expone via Micrometer Counter.builder(\"dm.messages.processed\") (data-management-demo, Java), Sist B via prometheus/client_golang (go-data-management). Misma unidad de trabajo (un mensaje RabbitMQ persistido con exito) medida en el mismo punto del pipeline en ambos sistemas, asi que la razon B/A aqui SI es un throughput comparable.",
+      "description": "Mide: mensajes persistidos/s en data-management, A vs B. Como: rate(dm_messages_processed_total) — mismo nombre de metrica en ambos (Micrometer FunctionCounter en A, client_golang en B). Por que: throughput por componente homologo con denominador comun (mismo evento, mismo punto del pipeline) — reemplaza el uso comparativo de los paneles 'Throughput agregado', que suman fenomenos heterogeneos.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2483,7 +2483,7 @@
         "uid": "PDF96AC866106AF7C"
       },
       "title": "A vs B - early-warning: mensajes procesados/s",
-      "description": "Throughput por componente homologo. Nombres de metrica DISTINTOS por historia de cada instrumentacion pero misma unidad de trabajo (un mensaje de sensor consumido y evaluado por early-warning): Sist A expone ew_messages_processed_total (Flask/prometheus_client, early-warning-demo), Sist B expone ew_messages_consumed_total (client_golang, go-early-warning). Se etiquetan explicitamente en la leyenda para que no se lean como la misma serie con un alias — son dos metricas distintas unidas solo porque miden el mismo evento del pipeline.",
+      "description": "Mide: mensajes de sensor procesados/s en early-warning, A vs B. Como: rate(ew_messages_processed_total) en A (Flask/prometheus_client) vs rate(ew_messages_consumed_total) en B (client_golang) — nombres distintos por historia de cada instrumentacion, etiquetados explicitamente en la leyenda. Por que: misma unidad de trabajo (mensaje consumido y evaluado), throughput comparable pese al nombre distinto.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2591,7 +2591,7 @@
         "uid": "PDF96AC866106AF7C"
       },
       "title": "A vs B - data-receiving: tramas recibidas/s",
-      "description": "Throughput por componente homologo. data_receiving_frames_total es el MISMO nombre de metrica en ambos sistemas por diseno: PipelineMetrics.cs (data-receiving-module-csharp, Sist A) es un espejo 1:1 del observability layer de go-data-receiving (Sist B) — mismos nombres, labels y unidad de trabajo (una trama DTU procesada, con label result=ok|rejected). Comparable directamente sin transformacion.",
+      "description": "Mide: tramas DTU procesadas/s en data-receiving, A vs B. Como: rate(data_receiving_frames_total) — mismo nombre y labels en ambos (PipelineMetrics.cs en A es espejo 1:1 del observability layer de B). Por que: throughput por componente homologo, comparable directamente sin transformacion (misma unidad de trabajo: trama DTU con result=ok|rejected).",
       "gridPos": {
         "h": 8,
         "w": 12,
