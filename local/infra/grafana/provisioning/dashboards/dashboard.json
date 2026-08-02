@@ -1306,7 +1306,7 @@
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
-      "description": "Mide: tiempo de procesamiento por frame, p50/p90/p95/p99 (s). Como: histogram_quantile sobre data_receiving_frame_processing_seconds_bucket (.NET). Por que: equivalente Sist A del panel de sesion TCP de B — aca se mide por-frame en vez de accept-a-close, pero es comparable porque en este protocolo 1 conexion = 1 frame (ver artillery-engine-dtu-tcp).",
+      "description": "Mide: tiempo de procesamiento por frame, p50/p90/p95/p99 (s). Como: histogram_quantile sobre data_receiving_frame_processing_seconds_bucket (.NET). Por que: equivalente Sist A del panel de sesion TCP de B — aca se mide por-frame en vez de accept-a-close, pero es comparable porque en este protocolo 1 conexion = 1 frame (ver artillery-engine-dtu-tcp). NO es pareja del otro panel de duracion de data-receiving: uno mide el procesamiento de una trama y el otro la vida de una conexion completa. Por eso van en filas separadas.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1432,7 +1432,7 @@
           "refId": "D"
         }
       ],
-      "title": "Sist A - data-receiving: duracion procesamiento frame p50-p99 (s)",
+      "title": "Sist A - data-receiving: duracion procesamiento POR FRAME p50-p99 (s)",
       "type": "timeseries"
     },
     {
@@ -1440,7 +1440,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Mide: duracion de sesion TCP (accept→close), p50/p90/p95/p99 (s). Como: histogram_quantile sobre data_receiving_tcp_connection_duration_seconds_bucket. Por que: es el \"tiempo de respuesta\" de data-receiving, pero a nivel de sesion completa (puede incluir varios frames) — no comparable con latencia HTTP por request, por eso vive en panel propio.",
+      "description": "Mide: duracion de sesion TCP (accept→close), p50/p90/p95/p99 (s). Como: histogram_quantile sobre data_receiving_tcp_connection_duration_seconds_bucket. Por que: es el \"tiempo de respuesta\" de data-receiving, pero a nivel de sesion completa (puede incluir varios frames) — no comparable con latencia HTTP por request, por eso vive en panel propio. NO es pareja del otro panel de duracion de data-receiving: uno mide el procesamiento de una trama y el otro la vida de una conexion completa. Por eso van en filas separadas.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1499,8 +1499,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 48
+        "x": 0,
+        "y": 56
       },
       "id": 10,
       "options": {
@@ -1566,7 +1566,7 @@
           "refId": "D"
         }
       ],
-      "title": "Sist B - data-receiving: duracion sesion TCP p50-p99 (s)",
+      "title": "Sist B - data-receiving: duracion de SESION TCP p50-p99 (s)",
       "type": "timeseries"
     },
     {
@@ -1634,7 +1634,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 64
       },
       "id": 11,
       "options": {
@@ -1746,7 +1746,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 64
       },
       "id": 12,
       "options": {
@@ -1880,7 +1880,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 72
       },
       "id": 13,
       "options": {
@@ -1981,7 +1981,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 72
       },
       "id": 14,
       "options": {
@@ -2041,7 +2041,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "fieldConfig": {
         "defaults": {
@@ -2135,7 +2135,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 72
+        "y": 80
       },
       "fieldConfig": {
         "defaults": {
@@ -2282,608 +2282,6 @@
           "refId": "B"
         }
       ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P551976F00C6E392A"
-      },
-      "description": "Mide: % de CPU en uso, todo el host. Como: 100 - tasa de node_cpu_seconds_total{mode=\"idle\"} (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: no es CPU del proceso del servicio (incluye SO y otras cargas del host) — usar el panel 'CPU por proceso' para comparar A vs B.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 80
-      },
-      "id": 1,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "timezone": [
-          "America/Lima"
-        ],
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P551976F00C6E392A"
-          },
-          "editorMode": "code",
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "CPU (%)"
-        }
-      ],
-      "title": "Sist A - CPU (%)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PDF96AC866106AF7C"
-      },
-      "description": "Mide: % de CPU en uso, todo el host. Como: 100 - tasa de node_cpu_seconds_total{mode=\"idle\"} (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: no es CPU del proceso del servicio, y A/B corren en hosts distintos — usar el panel 'CPU por proceso' para comparar A vs B.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": true,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 80
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "timezone": [
-          "America/Lima"
-        ],
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PDF96AC866106AF7C"
-          },
-          "editorMode": "code",
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Sist B - CPU (%)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P551976F00C6E392A"
-      },
-      "description": "Mide: memoria en uso, todo el host (MB). Como: node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: incluye page cache del SO y otros procesos, no solo el servicio — usar el panel 'Memoria por proceso' para comparar A vs B.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "decmbytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 88
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "timezone": [
-          "America/Lima"
-        ],
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Sist A - Memoria (MB)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PDF96AC866106AF7C"
-      },
-      "description": "Mide: memoria en uso, todo el host (MB). Como: node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes (node_exporter). Por que: contexto de saturacion del nodo. ADVERTENCIA: incluye page cache del SO y otros procesos, no solo el servicio — usar el panel 'Memoria por proceso' para comparar A vs B.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "decmbytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 88
-      },
-      "id": 4,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "timezone": [
-          "America/Lima"
-        ],
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PDF96AC866106AF7C"
-          },
-          "editorMode": "code",
-          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Sist B - Memoria (MB)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P551976F00C6E392A"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "description": "Mide: actividad total de Sistema A (req+msg/s). Como: suma de http_server_requests_seconds_count + ew_messages_processed_total + flask_http_request_duration_seconds_count. Por que: pulso general del sistema en el tiempo. ADVERTENCIA: suma fenomenos heterogeneos (HTTP, mensajes, distintos puntos del pipeline) sin denominador comun con el panel espejo de B — NO usar para % de mejora A vs B, solo como serie interna de A. Para comparar A vs B usar los paneles 'A vs B - <componente>'.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 96
-      },
-      "id": 5,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "timezone": [
-          "America/Lima"
-        ],
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P551976F00C6E392A"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(http_server_requests_seconds_count[1m])) + sum(rate(ew_messages_processed_total[1m])) + sum(rate(flask_http_request_duration_seconds_count[1m]))",
-          "legendFormat": "throughput (req+msg/s)",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Sist A - Throughput agregado (req+msg/s)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PDF96AC866106AF7C"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "description": "Mide: actividad total de Sistema B (req+msg/s). Como: suma de dm/data_receiving/ew_*_total mas cualquier *_request_duration_seconds_count. Por que: pulso general del sistema en el tiempo. ADVERTENCIA: suma fenomenos heterogeneos sin denominador comun con el panel espejo de A — NO usar para % de mejora A vs B, solo como serie interna de B. Para comparar A vs B usar los paneles 'A vs B - <componente>'.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 96
-      },
-      "id": 6,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "timezone": [
-          "America/Lima"
-        ],
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PDF96AC866106AF7C"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate({__name__=~\"dm_messages_processed_total|data_receiving_frames_total|ew_alerts_published_total\"}[1m])) + sum(rate({__name__=~\".*_request_duration_seconds_count\"}[1m]))",
-          "legendFormat": "throughput (req+msg/s)",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Sist B - Throughput agregado (req+msg/s)",
-      "type": "timeseries"
     }
   ],
   "preload": false,
