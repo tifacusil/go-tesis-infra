@@ -734,11 +734,551 @@
       ]
     },
     {
+      "id": 26,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - data-management: latencia HTTP p95 (s)",
+      "description": "Mide: latencia HTTP p95 de data-management, A vs B. Como: histogram_quantile(0.95) sobre el histograma de cada sistema, filtrado por service=\"data-management\". Por que: el percentil agregado promedia servicios con perfiles de trafico distintos, asi que solo la comparacion servicio-contra-servicio tiene denominador comun. A instrumenta via Micrometer (http_server_requests_seconds), B via middleware propio (http_request_duration_seconds); ambos con los mismos cortes de bucket.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{service=\"data-management\"}[5m])) by (le))",
+          "legendFormat": "Sist A",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"data-management\"}[5m])) by (le))",
+          "legendFormat": "Sist B",
+          "range": true,
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - project-management: latencia HTTP p95 (s)",
+      "description": "Mide: latencia HTTP p95 de project-management, A vs B. Como: histogram_quantile(0.95) sobre el histograma de cada sistema, filtrado por service=\"project-management\". Por que: el percentil agregado promedia servicios con perfiles de trafico distintos, asi que solo la comparacion servicio-contra-servicio tiene denominador comun. A instrumenta via Micrometer, B via middleware propio; mismos cortes de bucket.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{service=\"project-management\"}[5m])) by (le))",
+          "legendFormat": "Sist A",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"project-management\"}[5m])) by (le))",
+          "legendFormat": "Sist B",
+          "range": true,
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - user-management: latencia HTTP p95 (s)",
+      "description": "Mide: latencia HTTP p95 de user-management, A vs B. Como: histogram_quantile(0.95) sobre el histograma de cada sistema, filtrado por service=\"user-management\". Por que: el percentil agregado promedia servicios con perfiles de trafico distintos, asi que solo la comparacion servicio-contra-servicio tiene denominador comun. A instrumenta via Micrometer, B via middleware propio; mismos cortes de bucket.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{service=\"user-management\"}[5m])) by (le))",
+          "legendFormat": "Sist A",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"user-management\"}[5m])) by (le))",
+          "legendFormat": "Sist B",
+          "range": true,
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - early-warning: latencia HTTP p95 (s)",
+      "description": "Mide: latencia HTTP p95 de early-warning, A vs B. Como: histogram_quantile(0.95) sobre el histograma de cada sistema, filtrado por service=\"early-warning\". Por que: el percentil agregado promedia servicios con perfiles de trafico distintos, asi que solo la comparacion servicio-contra-servicio tiene denominador comun. A instrumenta via prometheus_flask_exporter (flask_http_request_duration_seconds), B via middleware propio; mismos cortes de bucket.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket{service=\"early-warning\"}[5m])) by (le))",
+          "legendFormat": "Sist A",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"early-warning\"}[5m])) by (le))",
+          "legendFormat": "Sist B",
+          "range": true,
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "title": "A vs B - data-analysis: latencia HTTP p95 (s)",
+      "description": "Mide: latencia HTTP p95 de data-analysis, A vs B. Como: histogram_quantile(0.95) sobre el histograma de cada sistema, filtrado por service=\"data-analysis\". Por que: el percentil agregado promedia servicios con perfiles de trafico distintos, asi que solo la comparacion servicio-contra-servicio tiene denominador comun. Unico par donde ambos usan el mismo nombre de metrica: A es Flask con instrumentacion manual y B es FastAPI, ambos sobre prometheus_client.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P551976F00C6E392A"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"data-analysis\"}[5m])) by (le))",
+          "legendFormat": "Sist A",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"data-analysis\"}[5m])) by (le))",
+          "legendFormat": "Sist B",
+          "range": true,
+          "refId": "B"
+        }
+      ]
+    },
+    {
       "datasource": {
         "type": "prometheus",
         "uid": "P551976F00C6E392A"
       },
-      "description": "Mide: latencia HTTP end-to-end, p50/p90/p95/p99 (s). Como: histogram_quantile sobre http_server_requests_seconds_bucket (Micrometer) + flask_http_request_duration_seconds_bucket (Flask), instrumentacion automatica del framework en cada endpoint. Por que: cobertura completa sin instrumentar handler por handler. Buckets alineados con B (5ms..5s) — percentiles comparables entre sistemas.",
+      "description": "Mide: perfil de latencia HTTP de Sistema A (p50/p90/p95/p99, s), agregando todos sus servicios. Como: histogram_quantile sobre http_server_requests_seconds_bucket (Micrometer) + flask_http_request_duration_seconds_bucket (Flask). Por que: ver la forma de la distribucion (cuanto se separa p99 de p50) dentro de A. NO usar para comparar contra B: el agregado promedia servicios con perfiles de trafico distintos, y el reparto de carga entre servicios no es identico en ambos sistemas. Para eso estan los paneles 'A vs B - <servicio>: latencia HTTP p95'.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -823,7 +1363,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 32
+        "y": 56
       },
       "id": 7,
       "options": {
@@ -889,7 +1429,7 @@
           "refId": "D"
         }
       ],
-      "title": "Sist A - Latencia p50/p90/p95/p99 (s)",
+      "title": "Sist A - Perfil de latencia HTTP interno p50-p99 (s, no comparativo)",
       "type": "timeseries"
     },
     {
@@ -897,7 +1437,7 @@
         "type": "prometheus",
         "uid": "PDF96AC866106AF7C"
       },
-      "description": "Mide: latencia HTTP end-to-end, p50/p90/p95/p99 (s), de los 4 servicios REST Go. Como: histogram_quantile sobre http_request_duration_seconds_bucket, mismo nombre de metrica en los 4 vía middleware que envuelve cada router. Por que: cobertura completa sin instrumentar handler por handler; buckets alineados con A (5ms..5s) → percentiles comparables. Excluye data-receiving (sesion TCP, no request HTTP — panel propio).",
+      "description": "Mide: perfil de latencia HTTP de Sistema B (p50/p90/p95/p99, s), agregando todos sus servicios. Como: histogram_quantile sobre http_request_duration_seconds_bucket, mismo nombre de metrica en todos vía middleware que envuelve cada router. Por que: ver la forma de la distribucion (cuanto se separa p99 de p50) dentro de B. NO usar para comparar contra A: el agregado promedia servicios con perfiles de trafico distintos. Para eso estan los paneles 'A vs B - <servicio>: latencia HTTP p95'. Excluye data-receiving (sesion TCP, no request HTTP — panel propio).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -982,7 +1522,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 32
+        "y": 56
       },
       "id": 8,
       "options": {
@@ -1048,7 +1588,7 @@
           "refId": "D"
         }
       ],
-      "title": "Sist B - Latencia p50/p90/p95/p99 (s)",
+      "title": "Sist B - Perfil de latencia HTTP interno p50-p99 (s, no comparativo)",
       "type": "timeseries"
     },
     {
@@ -1129,7 +1669,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 40
+        "y": 64
       },
       "id": 15,
       "options": {
@@ -1254,7 +1794,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 40
+        "y": 64
       },
       "id": 9,
       "options": {
@@ -1366,7 +1906,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 72
       },
       "id": 16,
       "options": {
@@ -1500,7 +2040,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 80
       },
       "id": 10,
       "options": {
@@ -1634,7 +2174,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 88
       },
       "id": 11,
       "options": {
@@ -1746,7 +2286,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 88
       },
       "id": 12,
       "options": {
@@ -1880,7 +2420,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 72
+        "y": 96
       },
       "id": 13,
       "options": {
@@ -1981,7 +2521,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 72
+        "y": 96
       },
       "id": 14,
       "options": {
@@ -2041,7 +2581,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 80
+        "y": 104
       },
       "fieldConfig": {
         "defaults": {
@@ -2135,7 +2675,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 80
+        "y": 104
       },
       "fieldConfig": {
         "defaults": {
