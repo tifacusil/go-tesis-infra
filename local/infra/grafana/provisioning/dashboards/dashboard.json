@@ -2822,6 +2822,173 @@
           "refId": "B"
         }
       ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Sist B - Replicas deseadas vs disponibles por Deployment",
+      "description": "Mide: replicas declaradas frente a las efectivamente disponibles por Deployment. Como: kube_deployment_status_replicas y _replicas_available de kube-state-metrics. Por que: una brecha entre ambas series es la ventana en que el orquestador esta reponiendo capacidad; en regimen estable las dos se superponen y el panel es plano por diseno. Sin equivalente en A: systemd repone el proceso pero no expone estado de replicas.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "kube_deployment_status_replicas{namespace=\"landslide\"}",
+          "legendFormat": "{{deployment}} deseadas",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "kube_deployment_status_replicas_available{namespace=\"landslide\"}",
+          "legendFormat": "{{deployment}} disponibles",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 112
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Sist B - Reinicios de contenedor (autorreparacion)",
+      "description": "Mide: reinicios de contenedor iniciados por el orquestador, sin intervencion humana. Como: increase() sobre kube_pod_container_status_restarts_total, que es un contador acumulado — el valor crudo solo sube y no dice cuando ocurrio el reinicio. Por que: es la evidencia directa de la autorreparacion frente al Sistema A, donde un proceso caido no se repone solo. NO demuestra escalado: no hay autoescalador horizontal configurado. Solo tiene senal dentro de las ventanas de chaos.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"landslide\"}[5m]))",
+          "legendFormat": "{{pod}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 112
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Sist B - Pods NO listos (ventana de indisponibilidad)",
+      "description": "Mide: pods que el orquestador considera no listos y retira de los Endpoints. Como: kube_pod_status_ready con condition=false; es la serie que muestra el hueco, mientras que condition=true solo confirma lo normal. Por que: acota cuanto dura la indisponibilidad entre la inyeccion del fallo y la reposicion, que es el dato que el resumen de los scripts de chaos deja solo en su salida de texto.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PDF96AC866106AF7C"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PDF96AC866106AF7C"
+          },
+          "editorMode": "code",
+          "expr": "sum by (pod) (kube_pod_status_ready{namespace=\"landslide\",condition=\"false\"})",
+          "legendFormat": "{{pod}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 120
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ],
   "preload": false,

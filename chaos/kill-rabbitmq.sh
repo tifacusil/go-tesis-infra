@@ -122,6 +122,7 @@ echo "    Instancia:  ${INSTANCE_KIND} ${old_id} (Ready=${old_state##* })"
 
 echo ""
 echo "--- Snapshot pre-fallo ---"
+pre_snapshot_at=$(date +%s)
 pre_snapshot=$(snapshot_counters "${LABEL}-pre")
 cat "$pre_snapshot"
 
@@ -210,6 +211,7 @@ echo "--- Esperando 30s adicionales para que productores/consumidores reconecten
 sleep 30
 
 echo "--- Snapshot post-recuperación ---"
+post_snapshot_at=$(date +%s)
 post_snapshot=$(snapshot_counters "${LABEL}-post")
 cat "$post_snapshot"
 
@@ -221,6 +223,25 @@ else
   echo "MTTR (broker listo de nuevo): TIMEOUT (>${RECOVERY_TIMEOUT}s, no se recuperó)"
 fi
 echo "Ver snapshots en: $pre_snapshot / $post_snapshot"
+
+# ── Linea de tiempo absoluta ────────────────────────────────────────────────
+# El MTTR de arriba es una duracion; para acotar el rango en Grafana y cruzar
+# con kube-state-metrics hace falta la hora de reloj de cada fase. UTC ademas de
+# local porque Prometheus y Grafana consultan en UTC.
+_ts() { local e="$1"; printf '%s  (UTC %s)' "$(date -d "@$e" '+%Y-%m-%d %H:%M:%S %Z')" "$(date -u -d "@$e" '+%H:%M:%S')"; }
+
+echo ""
+echo "=== Linea de tiempo ($SYSTEM_TAG) ==="
+echo "Snapshot pre-fallo:         $(_ts "$pre_snapshot_at")"
+echo "Fallo inyectado:            $(_ts "$fail_start")"
+if [[ "$recovered" == "true" ]]; then
+  echo "Broker listo de nuevo:      $(_ts "$(( fail_start + mttr ))")  [t+${mttr}s]"
+fi
+echo "Snapshot post-recuperacion: $(_ts "$post_snapshot_at")"
+echo ""
+echo "Rango para Grafana/Prometheus (UTC, con 60s de margen a cada lado):"
+echo "  from=$(date -u -d "@$(( pre_snapshot_at - 60 ))" '+%Y-%m-%dT%H:%M:%SZ')  to=$(date -u -d "@$(( post_snapshot_at + 60 ))" '+%Y-%m-%dT%H:%M:%SZ')"
+echo ""
 echo "Mensajes perdidos = (published_pre - consumed_pre) - (published_post - consumed_post) tras estabilizar,"
 echo "  o más simple: revisar 'dropped' en ambos snapshots y el backlog Redis (redis_buffer_pending) durante la ventana."
 

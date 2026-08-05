@@ -194,6 +194,7 @@ _cleanup() {
 
 echo ""
 echo "--- Snapshot pre-fallo ---"
+pre_snapshot_at=$(date +%s)
 pre_snapshot=$(snapshot_counters "${LABEL}-pre")
 cat "$pre_snapshot"
 
@@ -251,12 +252,14 @@ done
 
 echo ""
 echo "--- Descongelando (SIGCONT) ---"
+resume_at=$(date +%s)
 _resume
 sleep 5
 post_code=$(_probe_code)
 echo "    Gateway tras descongelar: $post_code"
 
 echo "--- Snapshot post-recuperacion ---"
+post_snapshot_at=$(date +%s)
 post_snapshot=$(snapshot_counters "${LABEL}-post")
 cat "$post_snapshot"
 
@@ -278,3 +281,25 @@ else
   echo "Blast radius NO acotado: siguió fallando toda la ventana — el balanceador nunca desvió el tráfico."
 fi
 echo "Ver snapshots en: $pre_snapshot / $post_snapshot"
+
+# ── Linea de tiempo absoluta ────────────────────────────────────────────────
+# Los offsets de arriba (t+Ns) son relativos al SIGSTOP y no sirven para acotar
+# el rango en Grafana ni para cruzar con las series de kube-state-metrics: hay
+# que saber a que hora de reloj ocurrio cada fase. UTC ademas de local porque
+# Prometheus y Grafana consultan en UTC, y la maquina cliente puede no estar en
+# la misma zona que el servidor donde se inyecto el fallo.
+_ts() { local e="$1"; printf '%s  (UTC %s)' "$(date -d "@$e" '+%Y-%m-%d %H:%M:%S %Z')" "$(date -u -d "@$e" '+%H:%M:%S')"; }
+
+echo ""
+echo "=== Linea de tiempo ($SYSTEM_TAG) ==="
+echo "Snapshot pre-fallo:      $(_ts "$pre_snapshot_at")"
+echo "SIGSTOP (fallo inyectado): $(_ts "$fail_start")"
+[[ -n "${first_fail_at:-}" ]] && \
+  echo "Primer fallo observado:  $(_ts "$(( fail_start + first_fail_at ))")  [t+${first_fail_at}s]"
+[[ -n "${recovered_at:-}" ]] && \
+  echo "Trafico desviado:        $(_ts "$(( fail_start + recovered_at ))")  [t+${recovered_at}s]"
+echo "SIGCONT (fin del fallo): $(_ts "$resume_at")  [t+$(( resume_at - fail_start ))s]"
+echo "Snapshot post-recuperacion: $(_ts "$post_snapshot_at")"
+echo ""
+echo "Rango para Grafana/Prometheus (UTC, con 60s de margen a cada lado):"
+echo "  from=$(date -u -d "@$(( pre_snapshot_at - 60 ))" '+%Y-%m-%dT%H:%M:%SZ')  to=$(date -u -d "@$(( post_snapshot_at + 60 ))" '+%Y-%m-%dT%H:%M:%SZ')"

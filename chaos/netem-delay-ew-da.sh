@@ -293,6 +293,7 @@ _driver() {
 
 echo ""
 echo "--- Snapshot pre-fallo (incluye estado de breakers) ---"
+pre_snapshot_at=$(date +%s)
 pre_snapshot=$(snapshot_counters "${LABEL}-pre")
 cat "$pre_snapshot"
 prom_query_raw 'ew_circuit_breaker_state' "$RESULTS_DIR/${LABEL}-pre-breakers.json"
@@ -385,6 +386,7 @@ fi
 
 echo ""
 echo "--- Snapshot post-recuperacion ---"
+post_snapshot_at=$(date +%s)
 post_snapshot=$(snapshot_counters "${LABEL}-post")
 cat "$post_snapshot"
 
@@ -397,6 +399,22 @@ echo "Continuidad operativa: revisar ew_alerts_published_total durante la ventan
 echo "  debe seguir creciendo (umbral simple) aunque el breaker esté abierto (CLAUDE.md §2.3)."
 echo "Ver snapshots en: $pre_snapshot / $post_snapshot"
 echo "Nota: el driver deja filas de reporte con project_id='${REPORT_PROJECT}' en la DB de EW."
+
+# -- Linea de tiempo absoluta ------------------------------------------------
+# Los offsets de arriba son relativos a la inyeccion del delay; para acotar el
+# rango en Grafana y cruzar con kube-state-metrics hace falta la hora de reloj.
+# UTC ademas de local porque Prometheus y Grafana consultan en UTC.
+_ts() { local e="$1"; printf '%s  (UTC %s)' "$(date -d "@$e" '+%Y-%m-%d %H:%M:%S %Z')" "$(date -u -d "@$e" '+%H:%M:%S')"; }
+
+echo ""
+echo "=== Linea de tiempo (sistema-B) ==="
+echo "Snapshot pre-fallo:         $(_ts "$pre_snapshot_at")"
+echo "Delay inyectado:            $(_ts "$fail_start")"
+[[ -n "${opened_at:-}" ]] &&   echo "Circuito abierto:           $(_ts "$(( fail_start + opened_at ))")  [t+${opened_at}s]"
+echo "Snapshot post-recuperacion: $(_ts "$post_snapshot_at")"
+echo ""
+echo "Rango para Grafana/Prometheus (UTC, con 60s de margen a cada lado):"
+echo "  from=$(date -u -d "@$(( pre_snapshot_at - 60 ))" '+%Y-%m-%dT%H:%M:%SZ')  to=$(date -u -d "@$(( post_snapshot_at + 60 ))" '+%Y-%m-%dT%H:%M:%SZ')"
 
 # Si el breaker NUNCA abrió con un delay > timeout, o no cerró después, es una
 # falla real del escenario o de la resiliencia: exit != 0 para que se note.
