@@ -51,6 +51,14 @@ data:
         static_configs:
           - targets: ['redis-exporter:9121']
 
+      # ── Estado de orquestacion (replicas, reinicios, readiness) ───────────
+      # Fuente de la autorreparacion: node-exporter mide el anfitrion y los
+      # /metrics de cada servicio miden el proceso, pero ninguno ve que el
+      # orquestador retire o reinicie un pod.
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: ['kube-state-metrics:8080']
+
       # ── Microservicios Go (/metrics) ──────────────────────────────────────
       # Solo puerto 8080 — descarta gRPC (50051, 9090) y TCP raw (5000).
       - job_name: microservices

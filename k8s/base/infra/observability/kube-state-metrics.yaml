@@ -1,0 +1,118 @@
+# kube-state-metrics — estado de los objetos de orquestacion (replicas, reinicios,
+# readiness). Es la unica fuente de la autorreparacion del cluster: node-exporter
+# mide el anfitrion y los /metrics de cada servicio miden el proceso, pero ninguno
+# ve que el orquestador retire un pod no listo ni que lo reinicie. Sin esto los
+# escenarios de caos solo dejan rastro en la salida de los scripts, no en una serie
+# temporal comparable contra el Sistema A.
+#
+# Expone las metricas con su propio ServiceAccount: no amplia el ClusterRole de
+# Prometheus, que sigue limitado a nodes/pods/services/endpoints (ver rbac.yaml).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-state-metrics
+  labels:
+    app: kube-state-metrics
+    tier: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-state-metrics
+  labels:
+    app: kube-state-metrics
+    tier: observability
+rules:
+  # Solo los recursos que producen las series usadas en el capitulo. Añadir mas
+  # tipos aqui amplia la superficie de lectura sin aportar al analisis.
+  - apiGroups: [""]
+    resources: [pods, nodes, services, replicationcontrollers]
+    verbs: [list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets, replicasets]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-state-metrics
+  labels:
+    app: kube-state-metrics
+    tier: observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-state-metrics
+subjects:
+  - kind: ServiceAccount
+    name: kube-state-metrics
+    namespace: landslide
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  labels:
+    app: kube-state-metrics
+    tier: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app: kube-state-metrics
+        tier: observability
+    spec:
+      serviceAccountName: kube-state-metrics
+      containers:
+        - name: kube-state-metrics
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0
+          args:
+            # Solo el namespace bajo prueba: recortar aqui reduce cardinalidad y
+            # deja fuera los objetos de kube-system, que no participan del experimento.
+            - '--namespaces=landslide'
+            - '--resources=pods,deployments,statefulsets,daemonsets,replicasets,nodes,services'
+          ports:
+            - name: metrics
+              containerPort: 8080
+            - name: telemetry
+              containerPort: 8081
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: telemetry
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 192Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  labels:
+    app: kube-state-metrics
+    tier: observability
+spec:
+  # Headless: Prometheus la descubre por el job estatico de configmap.yaml, no
+  # necesita ClusterIP ni balanceo.
+  clusterIP: None
+  selector:
+    app: kube-state-metrics
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: metrics

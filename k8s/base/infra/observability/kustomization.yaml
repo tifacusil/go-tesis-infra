@@ -6,4 +6,5 @@ resources:
   - configmap.yaml
   - prometheus.yaml
   - node-exporter.yaml
+  - kube-state-metrics.yaml
   - exporters.yaml
