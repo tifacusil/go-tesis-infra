@@ -116,11 +116,16 @@ region_id=$(grafana_annotate_region_start "Fase 2 · Sistema $SYSTEM · sostenid
 # siempre — de ahí el trap en vez de solo la llamada al final.
 trap 'grafana_annotate_region_end "$region_id"' EXIT
 
-# vu-sustained-12h.yml's arrivalRate is "{{ $processEnvironment.SUSTAINED_RATE }}",
-# which the dtu-tcp engine can't read when sizing its persistent-connection
-# pool (it only sees the literal template string in config.phases) — without
-# this, the pool silently falls back to 50 workers instead of the actual
-# discovered sustained rate. See README-engine.md ("Pool size").
+# DTU_ENGINE_POOL_SIZE es el total de conexiones TCP persistentes de TODA la
+# corrida, no por worker thread de Artillery: el engine lo divide por el
+# `totalWorkers` que Artillery estampa en cada fase. Ver README-engine.md
+# ("Pool size").
+#
+# Lo de acá abajo NO es por el template: se creía que el engine no podía leer
+# "{{ $processEnvironment.SUSTAINED_RATE }}" de config.phases, y es falso —
+# Artillery resuelve los templates ANTES de repartir el script entre threads,
+# así que cada thread ve un número. Queda explícito igual porque documenta la
+# intención y no depende de que Artillery siga dividiendo las fases.
 TARGET_HOST="$TARGET_HOST" SUSTAINED_RATE="$SUSTAINED_RATE" \
   DTU_ENGINE_POOL_SIZE="${DTU_ENGINE_POOL_SIZE:-$SUSTAINED_RATE}" artillery run \
   --output "$OUTPUT" \

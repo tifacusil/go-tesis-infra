@@ -63,12 +63,33 @@ matches the busiest moment of the scenario — e.g. `vu-100.yml` gets a
 export DTU_ENGINE_POOL_SIZE=50
 ```
 
-This is **required** for `vu-sustained-12h.yml`, whose `arrivalRate` is a
-templated `{{ $processEnvironment.SUSTAINED_RATE }}` the engine can't read at
-pool-creation time — without an explicit override it silently falls back to a
-default pool of 50. If unset and no numeric peak can be found anywhere in
-`config.phases`, the engine also falls back to 50 and logs nothing, so set
-this explicitly for any scenario whose rate isn't a plain number in the YAML.
+**Both numbers are totals for the whole `artillery run`, not per worker
+thread.** Artillery splits a local run across `os.cpus().length - 1` worker
+threads, and this engine is loaded once per thread — so a pool size taken at
+face value in every thread is multiplied by the core count. Two things keep
+that from happening:
+
+- The phase-derived default needs no correction: Artillery hands each thread a
+  script whose phases are *already divided* (15 threads at 100 req/s → each
+  thread reads a peak of 7).
+- `DTU_ENGINE_POOL_SIZE` **is** divided by the engine, using the `totalWorkers`
+  Artillery stamps on each phase.
+
+Templating is not an obstacle to either: `{{ $processEnvironment.SUSTAINED_RATE }}`
+is resolved *before* the script is split, so each thread sees a plain number.
+The earlier claim that `vu-sustained-12h.yml` *required* the override because
+the engine "can't read the template" was wrong — the override is kept there
+only to state the intended total explicitly.
+
+If no override is set and no numeric peak can be found anywhere in
+`config.phases`, the engine falls back to 50 per thread and logs nothing.
+
+> Sizing this wrong is not a client-side detail. At `DTU_ENGINE_POOL_SIZE=100`
+> undivided, a 16-core laptop opened 1500 connections instead of 100 and
+> overran nginx's stream ceiling on Sistema A (`768 worker_connections are not
+> enough while connecting to upstream`) 60s into the 12h ramp, with every
+> data-receiving instance healthy. The connection budget of the target is part
+> of the experiment.
 
 **Tradeoff:** measured `dtu_tcp.round_trip_ms` still includes one Python
 `stream` worker between the wire and the JSON response, but each worker now

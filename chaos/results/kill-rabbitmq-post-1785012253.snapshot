@@ -1,0 +1,7 @@
+timestamp=1785012253
+system=A
+published=1686972
+consumed_ew=505859
+consumed_dm=1348432
+dropped=n/a (Sistema A no expone esta metrica)
+redis_buffer_pending=n/a (Sistema A no expone esta metrica)

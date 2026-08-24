@@ -145,18 +145,48 @@ function _settle(entry, err, value) {
   else entry.resolve(value);
 }
 
+// How many Artillery worker threads this run was split across. Artillery's
+// divideWork stamps `totalWorkers` on every phase of every worker script. It's
+// absent when the script wasn't divided at all (a single-threaded run, or
+// `multiply` mode, where each thread gets the whole script) — then there is
+// nothing to divide by.
+function resolveWorkerShare(phases) {
+  for (const phase of phases) {
+    const n = Number(phase.totalWorkers);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 1;
+}
+
 // Sizes the pool to the scenario's peak arrivalRate/rampTo (roughly: how many
 // concurrent connections the old per-frame-spawn model would have opened at
-// its busiest), so pipeline depth per worker stays near zero. Override with
-// DTU_ENGINE_POOL_SIZE (e.g. required for vu-sustained-12h.yml, whose rate is
-// a templated env var this can't introspect).
+// its busiest), so pipeline depth per worker stays near zero.
+//
+// This engine runs INSIDE an Artillery worker thread, and Artillery splits the
+// run across `os.cpus().length - 1` of them. Each thread gets a script whose
+// phases are already divided by that count, and already templated — a
+// `{{ $processEnvironment.X }}` rate is resolved before the split, not after.
+// So the phase-derived path below is per-thread and self-scaling on its own:
+// SUSTAINED_RATE=100 over 15 threads gives each thread a peak of 7, 105 total.
+//
+// DTU_ENGINE_POOL_SIZE is a whole-process number, so it has to be divided the
+// same way. Undivided it was applied verbatim in EVERY thread: 15 pools of 100
+// = 1500 concurrent TCP connections where 100 were intended. Against Sistema A
+// that overran nginx's stream ceiling (2 workers x `worker_connections 768`,
+// and a stream session burns two connections — client + upstream — so 768
+// sessions total) ~60s into the 12h ramp. From there every refused connection
+// killed a `--no-retry` worker, the engine respawned into the same wall, and
+// the respawn breaker latched with the pool drained. The 12h run died at t=80s
+// with the three data-receiving instances perfectly healthy.
 function resolvePoolSize(script) {
+  const phases = (script.config && script.config.phases) || [];
   const envOverride = process.env.DTU_ENGINE_POOL_SIZE;
   if (envOverride !== undefined) {
     const n = Number(envOverride);
-    if (Number.isFinite(n) && n > 0) return Math.ceil(n);
+    if (Number.isFinite(n) && n > 0) {
+      return Math.max(1, Math.ceil(n / resolveWorkerShare(phases)));
+    }
   }
-  const phases = (script.config && script.config.phases) || [];
   let peak = 0;
   for (const phase of phases) {
     for (const key of ['arrivalRate', 'rampTo']) {

@@ -33,9 +33,17 @@
 #   POOL_PER_SHARD   conexiones Python persistentes por shard. Cada una es un
 #                    intérprete Python entero con su conexión TCP, así que el
 #                    total (SHARDS × POOL_PER_SHARD) es lo que puede reventar la
-#                    RAM del cliente: un intento con 4×40=160 procesos agotó la
-#                    memoria (WinError 8) y disparó un loop de respawn de >1000
-#                    procesos. El pool solo necesita ~rate·RTT conexiones para no
+#                    RAM del cliente: un intento con 4×40 agotó la memoria
+#                    (WinError 8) y disparó un loop de respawn de >1000
+#                    procesos. Ese "160" que decía acá era falso, y de ahí sale
+#                    el >1000: Artillery reparte cada `artillery run` en
+#                    os.cpus()-1 threads y el engine tomaba el pool entero en
+#                    CADA uno, así que eran 4 × 15 × 40 = 2400 intérpretes.
+#                    Corregido: el engine divide DTU_ENGINE_POOL_SIZE por el
+#                    `totalWorkers` de las fases, con lo cual este valor por fin
+#                    significa lo que dice. Ojo con pools chicos: el mínimo es
+#                    1 conexión por thread, así que nada baja de os.cpus()-1.
+#                    El pool solo necesita ~rate·RTT conexiones para no
 #                    encolar; a RTT ~0.3s eso es ~1/3 del rate. Default:
 #                    ceil(rate_del_shard × 0.4), mínimo 4.
 #   RTT_FACTOR       fracción del rate usada para el pool default (default 0.4).
