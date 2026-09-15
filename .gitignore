@@ -17,3 +17,8 @@ load-tests/results/*/
 **/rabbitmq-data-1/
 **/redis-data/
 **/mysql-data/
+
+# Centinela de parada del muestreo continuo (chaos/lib/sampler.sh) — efimero.
+# Los CSV de muestreo SI se versionan: son la evidencia de las inyecciones,
+# igual que los .snapshot.
+chaos/results/*.stop
