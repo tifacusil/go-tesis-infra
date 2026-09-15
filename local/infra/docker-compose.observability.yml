@@ -130,7 +130,7 @@ services:
   #   ssh -L 9090:localhost:9090 usuario@servidor
   # ─────────────────────────────────────────────────────────────────────────
   prometheus:
-    image: prom/prometheus:v3.4.1
+    image: prom/prometheus:v3.5.4
     container_name: prometheus
     hostname: prometheus
     restart: unless-stopped

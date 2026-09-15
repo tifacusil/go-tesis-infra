@@ -61,7 +61,7 @@ services:
   # La topología (exchanges, colas, DLX) se pre-declara via definitions.json
   # ───────────────────────────────────────────────────────────────────────────
   rabbitmq-1:
-    image: rabbitmq:4.3.1-management-alpine
+    image: rabbitmq:3.12.1-management-alpine
     container_name: rabbitmq-1
     hostname: rabbitmq-1
     restart: unless-stopped
@@ -85,7 +85,7 @@ services:
   # Política allkeys-lru, prefijo sensor_buffer:{message_id}
   # ───────────────────────────────────────────────────────────────────────────
   redis:
-    image: redis:8.8.0-alpine
+    image: redis:7.0.15-alpine
     container_name: redis
     hostname: redis
     restart: unless-stopped
@@ -109,7 +109,7 @@ services:
   # ───────────────────────────────────────────────────────────────────────────
 
   mysql-data-management:
-    image: mysql:9.7.0
+    image: mysql:8.0.46
     container_name: mysql-data-management
     hostname: mysql-data-management
     restart: unless-stopped
@@ -128,7 +128,7 @@ services:
       start_period: 30s
 
   mysql-user-management:
-    image: mysql:9.7.0
+    image: mysql:8.0.46
     container_name: mysql-user-management
     hostname: mysql-user-management
     restart: unless-stopped
@@ -147,7 +147,7 @@ services:
       start_period: 30s
 
   mysql-project-management:
-    image: mysql:9.7.0
+    image: mysql:8.0.46
     container_name: mysql-project-management
     hostname: mysql-project-management
     restart: unless-stopped
@@ -166,7 +166,7 @@ services:
       start_period: 30s
 
   mysql-early-warning:
-    image: mysql:9.7.0
+    image: mysql:8.0.46
     container_name: mysql-early-warning
     hostname: mysql-early-warning
     restart: unless-stopped
