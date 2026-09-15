@@ -35,6 +35,7 @@ y `tc` directo sobre el host.
 | `kill-rabbitmq.sh` | `pumba kill` sobre `rabbitmq-1` | Mide MTTR de reconexión de productores/consumidores AMQP y mensajes perdidos en el tramo sin broker |
 | `pause-data-management.sh` | `pumba pause` sobre `data-management-1` | Mide blast radius: ¿el balanceador (nginx round-robin) desvía tráfico a `data-management-2` sin errores visibles al cliente? |
 | `netem-delay-ew-da.sh` | `pumba netem delay` entre `early-warning-*` y `data-analysis-1` | Prueba el circuit breaker bajo latencia alta (no solo bajo down total) — CLAUDE.md §2.3: con el circuito abierto, Early Warning debe seguir alertando por umbral simple |
+| `publish-event.sh` | Publica **un** evento representativo (par de lecturas GNSS que cruza umbral) | Utilitario para AP5/AP6/AP7, no es un escenario de fallo. Ver [`../docs/ap5-ap6-ap7-procedimientos.md`](../docs/ap5-ap6-ap7-procedimientos.md) |
 | `netem-delay-ew-um.sh` | `tc netem delay` en los pods de `user-management` (vía SSH + nsenter) | Abre el breaker sobre la **ruta de alertas**, la única dependencia síncrona que puede ejercitarlo. Muestreo continuo + contadores de llamadas salientes. Ver sección dedicada abajo |
 
 ## Uso
