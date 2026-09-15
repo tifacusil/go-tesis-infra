@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: redis
-          image: redis:8.8.0-alpine
+          image: redis:7.0.15-alpine
           command:
             - sh
             - -c
