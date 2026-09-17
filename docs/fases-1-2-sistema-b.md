@@ -28,9 +28,11 @@ secuencia por `load-tests/run-all.sh`:
 | medición | 7 min | ventana de la que salen las métricas |
 | **total por nivel** | **10 min** | 30s de pausa antes del siguiente nivel |
 
-- **`REPEATS=3` por nivel.** Con una sola corrida no hay forma de separar una
+- **`REPEATS=5` por nivel.** Con una sola corrida no hay forma de separar una
   diferencia real del ruido de esa corrida. `aggregate-results.js` produce
-  mediana, media, desvío e IC 95% sobre las 3.
+  mediana, media, desvío e IC 95% sobre las 5. Eran 3 hasta el 2026-09-15: con
+  n=3 un solo outlier mueve la mediana y el IC sale tan ancho que no permite
+  afirmar diferencias entre A y B.
 - **Ingesta TCP**, no HTTP: frames binarios DTU contra `data-receiving:5000`.
   Engine `artillery-engine-dtu-tcp`, pool de procesos Python (`dtu-emulator`),
   una conexión TCP persistente por proceso.
