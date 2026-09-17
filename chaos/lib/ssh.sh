@@ -43,10 +43,44 @@ K8S_NAMESPACE="${K8S_NAMESPACE:-landslide}"
 # Que falte tiene que ser un error ruidoso, no una elección implícita.
 SSH_ORCHESTRATOR="${SSH_ORCHESTRATOR:-}"
 
+# CHAOS_LOCAL=1 — ejecutar EN la maquina actual en vez de por SSH.
+#
+# Los escenarios se escribieron para dispararse desde la maquina de trabajo
+# contra el servidor, pero a veces hay que correrlos DENTRO del propio servidor
+# (por ejemplo al validar un despliegue recien hecho, con una sesion ssh ya
+# abierta). Sin esto _ssh_require aborta pidiendo SSH_HOST aunque el host de
+# destino sea justamente donde ya estamos parados.
+#
+# Se autodetecta: si no hay SSH_HOST pero si hay un kubectl que puede hablar
+# con el cluster, estamos en el nodo. Setear CHAOS_LOCAL explicitamente gana
+# sobre la deteccion, en cualquiera de los dos sentidos.
+_chaos_detect_local() {
+  [[ -n "${CHAOS_LOCAL:-}" ]] && return 0
+  if [[ -z "${SSH_HOST:-}" ]] && command -v kubectl >/dev/null 2>&1 \
+     && kubectl version >/dev/null 2>&1; then
+    CHAOS_LOCAL=1
+  else
+    CHAOS_LOCAL=0
+  fi
+}
+_chaos_detect_local
+
 # _ssh_require — valida que estén las variables mínimas de conexión. Se llama
 # al inicio de cada escenario que inyecta remoto, para fallar temprano con un
 # mensaje claro en vez de a mitad de la inyección.
 _ssh_require() {
+  # En modo local no hay conexion que validar: los comandos corren aca mismo.
+  # Lo que si hace falta es poder hablar con el cluster, porque todo lo demas
+  # (kubectl, crictl, nsenter) lo asume.
+  if [[ "$CHAOS_LOCAL" == "1" ]]; then
+    if ! kubectl version >/dev/null 2>&1; then
+      echo "ERROR: CHAOS_LOCAL=1 pero kubectl no puede hablar con el cluster." >&2
+      echo "  En k3s el kubeconfig es 600 root:root — correr con sudo, o exportar" >&2
+      echo "  KUBECONFIG a una copia legible." >&2
+      return 1
+    fi
+    return 0
+  fi
   : "${SSH_HOST:?Falta SSH_HOST — el chaos se inyecta en el servidor remoto, no en Docker local. Ej: SSH_HOST=178.105.104.95}"
   : "${SSH_USER:?Falta SSH_USER}"
   if [[ -z "${SSH_PASSWORD:-}${SSH_KEY_PATH:-}" ]]; then
@@ -61,6 +95,12 @@ _ssh_require() {
 # efímero con ambos (alpine + apk). Mismo patrón que reset-state.sh.
 _ssh_run() {
   local remote_cmd="$1"
+  # Modo local: se ejecuta tal cual, sin capa de transporte. El comando ya viene
+  # como una cadena para `sh -c`, asi que la semantica es la misma.
+  if [[ "$CHAOS_LOCAL" == "1" ]]; then
+    sh -c "$remote_cmd"
+    return $?
+  fi
   # -n (stdin desde /dev/null) es obligatorio: sin eso ssh LEE stdin, y dentro
   # de un `while read ... <<<"$(...)"` se traga el resto de la entrada — el loop
   # corre una sola vuelta y las demás desaparecen sin error. Se detectó
@@ -123,6 +163,17 @@ _kubectl() {
 # poder pasar pipelines. El caller es responsable de citar lo que necesite.
 _sudo_run() {
   local remote_cmd="$1"
+  if [[ "$CHAOS_LOCAL" == "1" ]]; then
+    # Ya root (lo habitual al correr en el nodo): sin sudo, que puede no estar.
+    if [[ "$(id -u)" == "0" ]]; then
+      sh -c "$remote_cmd"
+    elif [[ -n "$SUDO_PASSWORD" ]]; then
+      echo "$SUDO_PASSWORD" | sudo -S -p '' sh -c "$remote_cmd"
+    else
+      sudo -n sh -c "$remote_cmd"
+    fi
+    return $?
+  fi
   if [[ -n "$SUDO_PASSWORD" ]]; then
     _ssh_run "echo $(printf '%q' "$SUDO_PASSWORD") | sudo -S -p '' sh -c $(printf '%q' "$remote_cmd")"
   else
