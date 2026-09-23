@@ -52,6 +52,15 @@ spec:
             # agregar workers cambia una variable sin poder medir su efecto.
             - name: CONSUMER_WORKERS
               value: "1"
+            # Ventana de dedup del Idempotent Consumer (early_warning:idemp:*).
+            # El default de 24h deja una key por mensaje durante un dia entero:
+            # en la prueba de 12h del 2026-09-18 eso fueron ~100k keys/h, que
+            # llenaron el maxmemory de Redis y terminaron en el OOM del pod.
+            # Los redeliveries de RabbitMQ llegan en segundos o minutos, asi que
+            # 1h los cubre. Sistema A no deduplica, asi que esto tambien
+            # mantiene la huella de Redis comparable entre los dos sistemas.
+            - name: IDEMPOTENCY_TTL
+              value: "1h"
           livenessProbe:
             httpGet:
               path: /health
