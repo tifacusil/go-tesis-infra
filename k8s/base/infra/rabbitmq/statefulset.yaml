@@ -57,9 +57,10 @@ spec:
             requests:
               cpu: 100m
               memory: 256Mi
-            limits:
-              cpu: "300m"
-              memory: 512Mi
+            # Sin limits, igual que Sistema A (systemd sin CPUQuota ni MemoryMax).
+            # El cap de 300m throttleaba a RabbitMQ bajo carga (~3h acumuladas
+            # de throttling en 4 dias). La memoria la acota el propio broker con
+            # vm_memory_high_watermark (ver config/rabbitmq.conf).
       volumes:
         - name: config
           configMap:
