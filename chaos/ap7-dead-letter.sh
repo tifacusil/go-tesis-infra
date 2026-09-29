@@ -70,6 +70,9 @@ PROBE_QUEUE="ap7.probe.${RUN_TS}"
 EW_RAW="${BASE}-ew-raw.tmp"
 
 _ssh_require
+# En modo local (CHAOS_LOCAL, corriendo en el nodo de B) el orquestador es k8s
+# por definicion: _ssh_require ya verifico que kubectl hable con el cluster.
+[[ "$CHAOS_LOCAL" == "1" ]] && SSH_ORCHESTRATOR="${SSH_ORCHESTRATOR:-k8s}"
 exec > >(tee -a "${BASE}.log") 2>&1
 if [[ "$SSH_ORCHESTRATOR" != "k8s" ]]; then
   echo "ERROR: AP7 verifica el retry acotado -> DLQ de early-warning del Sistema B (SSH_ORCHESTRATOR=k8s)." >&2
@@ -145,7 +148,7 @@ echo "--- 2. Cola sonda $PROBE_QUEUE enlazada a sensors.dlx ---"
 rabbit_api PUT "/api/queues/%2F/${PROBE_QUEUE}" '{"durable":false,"auto_delete":false,"arguments":{"x-expires":1800000}}' >/dev/null
 probe_created=1
 rabbit_api POST "/api/bindings/%2F/e/sensors.dlx/q/${PROBE_QUEUE}" '{"routing_key":"#","arguments":{}}' >/dev/null
-if [[ "$(rabbit_api GET "/api/queues/%2F/${PROBE_QUEUE}/bindings")" != *'"source":"sensors.dlx"'* ]]; then
+if ! rabbit_api GET "/api/queues/%2F/${PROBE_QUEUE}/bindings" | grep -qE '"source"[[:space:]]*:[[:space:]]*"sensors\.dlx"'; then
   echo "ERROR: la cola sonda no quedó enlazada a sensors.dlx." >&2
   exit 1
 fi

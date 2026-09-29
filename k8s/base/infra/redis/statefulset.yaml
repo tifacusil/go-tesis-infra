@@ -20,6 +20,7 @@ spec:
       containers:
         - name: redis
           image: redis:7.0.15-alpine
+          # Flags alineados con /etc/redis/redis.conf de Sistema A.
           command:
             - sh
             - -c
@@ -27,8 +28,9 @@ spec:
               exec redis-server
               --requirepass "$REDIS_PASSWORD"
               --appendonly yes --appendfsync everysec
-              --maxmemory 128mb --maxmemory-policy allkeys-lru
-              --save 900 1 --save 300 10
+              --maxmemory 256mb --maxmemory-policy allkeys-lru
+              --save 900 1 --save 300 10 --save 60 10000
+              --timeout 300 --tcp-keepalive 60 --maxclients 1000
           ports:
             - name: redis
               containerPort: 6379
@@ -38,10 +40,19 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+          # Cargar el AOF de un dataset lleno tarda mas de lo que el liveness
+          # toleraba (~40s): el pod entraba en CrashLoopBackOff sin poder terminar
+          # de arrancar. El startupProbe da hasta 5 min y bloquea el liveness
+          # mientras tanto.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "redis-cli -a \"$REDIS_PASSWORD\" ping | grep -q PONG"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           livenessProbe:
             exec:
               command: ["sh", "-c", "redis-cli -a \"$REDIS_PASSWORD\" ping | grep -q PONG"]
-            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
           readinessProbe:
@@ -55,8 +66,10 @@ spec:
               cpu: 50m
               memory: 128Mi
             limits:
-              cpu: "100m"
-              memory: 192Mi
+              # Sin limits.cpu, igual que Sistema A (systemd sin limite).
+              # Memoria: ~3x maxmemory, para que el fork de BGSAVE/AOF rewrite
+              # (copy-on-write) no dispare el OOM del cgroup como el 2026-09-19.
+              memory: 768Mi
   volumeClaimTemplates:
     - metadata:
         name: data

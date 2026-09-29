@@ -41,6 +41,9 @@ SKIP_BASELINE="${SKIP_BASELINE:-0}"
 
 _ssh_require
 
+# En modo local (CHAOS_LOCAL, corriendo en el nodo de B) el orquestador es k8s
+# por definicion: _ssh_require ya verifico que kubectl hable con el cluster.
+[[ "$CHAOS_LOCAL" == "1" ]] && SSH_ORCHESTRATOR="${SSH_ORCHESTRATOR:-k8s}"
 case "$SSH_ORCHESTRATOR" in
   k8s)    sys="B" ;;
   native) sys="A" ;;

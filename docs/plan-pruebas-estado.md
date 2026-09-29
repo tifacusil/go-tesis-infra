@@ -14,7 +14,7 @@ Para el detalle de los cambios ver
 
 **Objetivo:** encontrar la tasa de entrada sostenida de cada sistema.
 
-**Cómo:** escalones de VU × 3 repeticiones, mediana + IC 95%
+**Cómo:** escalones de VU × 5 repeticiones, mediana + IC 95%
 (`load-tests/aggregate-results.js`).
 
 **Alcance efectivo: ≤100 fps.** Por encima de 100, el generador de carga
@@ -32,12 +32,25 @@ desplegados en A y B.
 
 | sistema | escalera | resultado |
 |---|---|---|
-| B | ✅ hecho (2026-07-22) | `SUSTAINED_RATE = 100`, piso validado |
+| B | ⬜ **rehacer** | la del 2026-07-22 (`SUSTAINED_RATE = 100`) quedó invalidada por el downgrade de infra del 2026-09-15 |
 | A | ⬜ pendiente | la escalera del 18-jul usó el corpus viejo; hay que rehacer |
 
-**Falta:** correr A en niveles 1/10/50/100 × 3 (~2h15). Requisitos previos:
-1. Archivar los resultados viejos de A (`results/A/*.json` del 18-jul) →
-   `results/A-corpus-viejo/`, igual que se hizo con B.
+**El downgrade del 2026-09-15 invalidó la línea base de B.** RabbitMQ 4.3→3.12,
+Redis 8.8→7.0 y MySQL 9.7→8.0 cambian el perfil de throughput, así que los
+números del 2026-07-22 no son comparables con nada medido después. Se conservan
+en `docs/ladder-b-2026-07-22.md` como registro de la configuración anterior, no
+como línea base vigente. Versiones actuales y comandos de verificación: tabla
+"Versiones de infraestructura" en [`runbook-fases.md`](runbook-fases.md).
+
+**Falta:** correr A y B en niveles 1/10/50/100 × **5** (~3h30 cada uno, ~7h en
+total). Se subió de 3 a 5 repeticiones porque con n=3 un solo outlier mueve la
+mediana y el IC 95 % sale demasiado ancho para afirmar diferencias entre A y B.
+Requisitos previos:
+1. Archivar los resultados viejos de **ambos**: los de A (`results/A/*.json` del
+   18-jul) → `results/A-corpus-viejo/`, y los de B del 2026-07-22
+   (`results/B/*.json`) → `results/B-infra-vieja/`, que quedaron obsoletos por el
+   downgrade. Si no se archivan, `aggregate-results.js` los mezcla con los
+   nuevos y la mediana sale de dos configuraciones distintas.
 2. Activar el bloque de A en `load-tests/.env` (systemd nativo, `204.168.203.32`,
    `SSH_ORCHESTRATOR=native`) o pasar las variables por línea de comando.
    Con el bloque de B activo, `reset-state.sh` limpiaría el Redis de B mientras

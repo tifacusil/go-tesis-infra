@@ -88,10 +88,11 @@ RABBITMQ_SELECTOR="${RABBITMQ_SELECTOR:-app=rabbitmq}"
 ALERT_PROJECT="${ALERT_PROJECT:-shangtan}"   # debe existir en defaultLevels() de EW
 # El epoch en el prefijo es obligatorio para repetir el escenario: los
 # message_id son <prefijo>-r<ronda>-s<i>-a/b, y EW marca cada uno como procesado
-# por 24h (IDEMPOTENCY_TTL). Con un prefijo fijo, la segunda corrida del dia
-# repetia los mismos ids, EW los descartaba todos como duplicate_skipped, no
-# habia alertas y la precondicion abortaba — justo en las repeticiones que O6
-# exige. Tambien evita heredar las lineas base de Redis de la corrida anterior.
+# durante IDEMPOTENCY_TTL (1h en B). Con un prefijo fijo, la siguiente corrida
+# dentro de esa ventana repetia los mismos ids, EW los descartaba todos como
+# duplicate_skipped, no habia alertas y la precondicion abortaba — justo en las
+# repeticiones que O6 exige. Tambien evita heredar las lineas base de Redis de
+# la corrida anterior.
 ALERT_SENSOR_PREFIX="${ALERT_SENSOR_PREFIX:-chaos-um-$(date +%s)}"
 ALERT_ROUND_SLEEP="${ALERT_ROUND_SLEEP:-3}"
 # Sensores distintos por ronda: el breaker necesita fallos CONSECUTIVOS, y cada
@@ -129,6 +130,9 @@ case "$NETEM_SCOPE" in
     ;;
 esac
 
+# En modo local el orquestador es k8s por definicion: _ssh_require ya verifico
+# que kubectl hable con el cluster, asi que exigir la variable seria ruido.
+[[ "$CHAOS_LOCAL" == "1" ]] && SSH_ORCHESTRATOR="${SSH_ORCHESTRATOR:-k8s}"
 if [[ "$SSH_ORCHESTRATOR" != "k8s" ]]; then
   echo "ERROR: este escenario solo está implementado para el Sistema B (SSH_ORCHESTRATOR=k8s)." >&2
   echo "  El Sistema A no tiene circuit breaker: el observable tendría que ser otro." >&2
@@ -226,7 +230,8 @@ done <<<"$targets"
 
 # ── Driver de alertas ────────────────────────────────────────────────────────
 # Publica pares de lecturas GNSS por sensor en sensors.raw vía la Management API
-# de RabbitMQ (lib/event.sh: curl dentro del pod, sin rabbitmqadmin ni python).
+# de RabbitMQ (lib/event.sh: python3 dentro del pod; la imagen -alpine no trae
+# curl ni rabbitmqadmin).
 #
 # Cómo fuerza una alerta de forma determinista: EW calcula
 #   speed_mm_dia = (cum_2 - cum_1) / dt_segundos * 86400

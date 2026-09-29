@@ -28,6 +28,23 @@ Los escenarios inyectan por SSH con las herramientas del propio nodo
 del netns del pod (vía `nsenter`) para la latencia. En el Sistema A, `systemctl`
 y `tc` directo sobre el host.
 
+### Correr DENTRO del servidor (`CHAOS_LOCAL`)
+
+Los escenarios se disparan desde la máquina de trabajo, pero a veces hay que
+correrlos en el propio nodo — al validar un despliegue recién hecho, por
+ejemplo, con una sesión ssh ya abierta. `lib/ssh.sh` lo detecta solo: si no hay
+`SSH_HOST` y `kubectl` puede hablar con el cluster, ejecuta local en vez de
+abrir una conexión contra sí mismo.
+
+```bash
+sudo bash chaos/publish-event.sh           # detectado automáticamente
+CHAOS_LOCAL=1 bash chaos/publish-event.sh  # forzado
+CHAOS_LOCAL=0 ...                          # forzar remoto pese a estar en el nodo
+```
+
+En k3s el kubeconfig es `600 root:root`, así que hace falta `sudo`. Siendo root
+ya no se vuelve a invocar `sudo`, que puede no estar instalado en el nodo.
+
 ## Escenarios
 
 | Script | Acción | Objetivo |

@@ -38,41 +38,70 @@ _iso_utc() { date -u -d "@$1" '+%Y-%m-%dT%H:%M:%SZ'; }
 
 # rabbit_api <METHOD> <path> [json_body] — llama a la Management API DESDE el
 # servidor (no está expuesta a esta máquina) e imprime la respuesta.
-#   - B: dentro del pod de RabbitMQ, con las credenciales de su entorno.
-#   - A: en el host, contra localhost, con RABBITMQ_MGMT_USER/PASS.
-# El body viaja en base64: atraviesa ssh -> sudo -> kubectl exec -> sh -c sin
-# tener que escapar comillas en cada nivel.
+#   - B: python3 dentro del pod de RabbitMQ, con las credenciales de su entorno.
+#   - A: python3 en el host, contra localhost, con RABBITMQ_MGMT_USER/PASS.
+#
+# python3 + urllib y no curl: rabbitmq:3.12.1-management-alpine NO trae curl
+# (`sh: curl: not found`, verificado en el servidor el 2026-09-15) ni
+# rabbitmqadmin; python3 sí, lo usa el propio broker. Con curl el publish no
+# ocurría y la prueba concluía por la razón equivocada.
+#
+# El script Python se arma acá y viaja como un solo argumento citado con %q; el
+# body va en base64 dentro de él, así atraviesa ssh -> sudo -> kubectl exec sin
+# escapar comillas en cada nivel. No hace falta python local.
+_RABBIT_POD=""
 rabbit_api() {
   local method="$1" path="$2" body="${3:-}"
-  local b64="" tmp="/tmp/chaos-api-$$-$RANDOM.json"
+  local b64="" auth_expr
   [[ -n "$body" ]] && b64=$(printf '%s' "$body" | base64 | tr -d '\n')
 
   case "$SSH_ORCHESTRATOR" in
     k8s)
-      local inner="curl -s -u \"\$RABBITMQ_DEFAULT_USER:\$RABBITMQ_DEFAULT_PASS\" -H content-type:application/json -X $method http://localhost:15672$path"
-      if [[ -n "$b64" ]]; then
-        inner="echo $b64 | base64 -d > $tmp && $inner -d @$tmp; rc=\$?; rm -f $tmp; exit \$rc"
-      fi
-      _sudo_run "pod=\$(kubectl -n $K8S_NAMESPACE get pod -l $RABBITMQ_SELECTOR -o jsonpath='{.items[0].metadata.name}'); \
-kubectl -n $K8S_NAMESPACE exec \$pod -- sh -c '$inner'"
+      auth_expr='base64.b64encode((os.environ["RABBITMQ_DEFAULT_USER"] + ":" + os.environ["RABBITMQ_DEFAULT_PASS"]).encode()).decode()'
       ;;
     native)
       if [[ -z "${RABBITMQ_MGMT_USER:-}" || -z "${RABBITMQ_MGMT_PASS:-}" ]]; then
         echo "ERROR: Sistema A requiere RABBITMQ_MGMT_USER y RABBITMQ_MGMT_PASS (Management API en el host)." >&2
         return 1
       fi
-      local auth; auth=$(printf '%q' "${RABBITMQ_MGMT_USER}:${RABBITMQ_MGMT_PASS}")
-      local cmd="curl -s -u $auth -H content-type:application/json -X $method http://localhost:${RABBITMQ_MGMT_PORT}$path"
-      if [[ -n "$b64" ]]; then
-        cmd="echo $b64 | base64 -d > $tmp && $cmd -d @$tmp; rc=\$?; rm -f $tmp; exit \$rc"
-      fi
-      _ssh_run "$cmd"
+      auth_expr="\"$(printf '%s' "${RABBITMQ_MGMT_USER}:${RABBITMQ_MGMT_PASS}" | base64 | tr -d '\n')\""
       ;;
     *)
       echo "ERROR: SSH_ORCHESTRATOR='${SSH_ORCHESTRATOR:-}' — usar 'k8s' (Sistema B) o 'native' (Sistema A)." >&2
       return 1
       ;;
   esac
+
+  local port="$RABBITMQ_MGMT_PORT"
+  [[ "$SSH_ORCHESTRATOR" == "k8s" ]] && port=15672
+  local py
+  py=$(cat <<PYEOF
+import base64, os, sys, urllib.error, urllib.request
+b64 = "$b64"
+data = base64.b64decode(b64) if b64 else None
+auth = $auth_expr
+r = urllib.request.Request("http://localhost:$port$path", data=data, method="$method",
+    headers={"Content-Type": "application/json", "Authorization": "Basic " + auth})
+try:
+    print(urllib.request.urlopen(r, timeout=15).read().decode())
+except urllib.error.HTTPError as e:
+    print("HTTP %d: %s" % (e.code, e.read().decode()[:300]), file=sys.stderr)
+    sys.exit(1)
+PYEOF
+)
+
+  if [[ "$SSH_ORCHESTRATOR" == "k8s" ]]; then
+    if [[ -z "$_RABBIT_POD" ]]; then
+      _RABBIT_POD=$(_sudo_run "kubectl -n $K8S_NAMESPACE get pod -l $RABBITMQ_SELECTOR -o jsonpath='{.items[0].metadata.name}'")
+      if [[ -z "$_RABBIT_POD" ]]; then
+        echo "ERROR: no se encontró ningún pod de RabbitMQ con el selector '$RABBITMQ_SELECTOR'." >&2
+        return 1
+      fi
+    fi
+    _sudo_run "kubectl -n $K8S_NAMESPACE exec $_RABBIT_POD -- python3 -c $(printf '%q' "$py")"
+  else
+    _ssh_run "python3 -c $(printf '%q' "$py")"
+  fi
 }
 
 # event_reading_json <message_id> <sensor_id> <epoch> <cumulative_mm> — un
@@ -95,7 +124,7 @@ event_publish() {
   local req="{\"properties\":{\"delivery_mode\":2,\"content_type\":\"application/json\"},\"routing_key\":\"${EVENT_ROUTING_KEY}\",\"payload\":\"${esc}\",\"payload_encoding\":\"string\"}"
   local resp
   resp=$(rabbit_api POST "/api/exchanges/%2F/${EVENT_EXCHANGE}/publish" "$req") || true
-  if [[ "$resp" != *'"routed":true'* ]]; then
+  if ! grep -qE '"routed"[[:space:]]*:[[:space:]]*true' <<<"$resp"; then
     echo "ERROR: el broker no enrutó la lectura (exchange=${EVENT_EXCHANGE} rk=${EVENT_ROUTING_KEY})." >&2
     echo "  Respuesta de la Management API: ${resp:-<vacía>}" >&2
     echo "  Si es {\"routed\":false}: ninguna cola matchea la routing key en este sistema (EVENT_ROUTING_KEY)." >&2
@@ -126,7 +155,7 @@ event_publish_pair() {
 rabbit_queue_messages() {
   local queue="$1" resp
   resp=$(rabbit_api GET "/api/queues/%2F/${queue}?columns=messages") || return 1
-  grep -oE '"messages":[0-9]+' <<<"$resp" | head -1 | cut -d: -f2
+  grep -oE '"messages"[[:space:]]*:[[:space:]]*[0-9]+' <<<"$resp" | head -1 | grep -oE '[0-9]+$'
 }
 
 # mysql_query <pod> <sql> — ejecuta SQL como root en el pod MySQL de un servicio

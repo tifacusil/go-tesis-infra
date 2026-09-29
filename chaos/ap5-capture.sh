@@ -58,6 +58,9 @@ source "$SCRIPT_DIR/lib/ssh.sh"
 source "$SCRIPT_DIR/lib/event.sh"
 
 _ssh_require
+# En modo local (CHAOS_LOCAL, corriendo en el nodo de B) el orquestador es k8s
+# por definicion: _ssh_require ya verifico que kubectl hable con el cluster.
+[[ "$CHAOS_LOCAL" == "1" ]] && SSH_ORCHESTRATOR="${SSH_ORCHESTRATOR:-k8s}"
 case "$SSH_ORCHESTRATOR" in
   k8s)
     SYS="B"
@@ -102,8 +105,8 @@ echo "    Evidencia:  ${BASE}*"
 # Desde la Management API, igual en A y en B: mensajes en cola y tasa de
 # publicación. Con carga activa, el tráfico del evento se pierde en el ruido.
 overview=$(rabbit_api GET "/api/overview?columns=queue_totals,message_stats" || echo "")
-ready=$(grep -oE '"messages_ready":[0-9]+' <<<"$overview" | head -1 | cut -d: -f2 || true)
-pub_rate=$(grep -oE '"publish_details":\{"rate":[0-9.]+' <<<"$overview" | head -1 | grep -oE '[0-9.]+$' || true)
+ready=$(grep -oE '"messages_ready"[[:space:]]*:[[:space:]]*[0-9]+' <<<"$overview" | head -1 | grep -oE '[0-9]+$' || true)
+pub_rate=$(grep -oE '"publish_details"[[:space:]]*:[[:space:]]*\{[[:space:]]*"rate"[[:space:]]*:[[:space:]]*[0-9.]+' <<<"$overview" | head -1 | grep -oE '[0-9.]+$' || true)
 at_rest=$(awk -v r="${ready:-0}" -v p="${pub_rate:-0}" 'BEGIN { print (r+0 == 0 && p+0 < 0.5 ? "si" : "no") }')
 echo "    Colas: ${ready:-?} listos, publicación ${pub_rate:-?} msg/s -> en reposo: $at_rest"
 if [[ -z "$overview" ]]; then

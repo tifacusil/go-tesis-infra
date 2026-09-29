@@ -57,6 +57,9 @@ RUN_TS=$(date +%s)
 BASE="$RESULTS_DIR/ap6-${RUN_TS}"
 
 _ssh_require
+# En modo local (CHAOS_LOCAL, corriendo en el nodo de B) el orquestador es k8s
+# por definicion: _ssh_require ya verifico que kubectl hable con el cluster.
+[[ "$CHAOS_LOCAL" == "1" ]] && SSH_ORCHESTRATOR="${SSH_ORCHESTRATOR:-k8s}"
 exec > >(tee -a "${BASE}.log") 2>&1
 if [[ "$SSH_ORCHESTRATOR" != "k8s" ]]; then
   echo "ERROR: AP6 verifica la idempotencia de early-warning y data-management del Sistema B" >&2
