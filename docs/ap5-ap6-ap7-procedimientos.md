@@ -17,6 +17,41 @@ Requisito común: `SSH_HOST`, `SSH_USER`, `SSH_KEY_PATH`/`SSH_PASSWORD`,
 `SUDO_PASSWORD` y `PROMETHEUS_ADDR` como en los escenarios de chaos
 (ver [`../chaos/README.md`](../chaos/README.md)).
 
+## Ejecución automatizada
+
+Los tres procedimientos están automatizados. Cada script ejecuta los pasos de su
+sección, evalúa los criterios de aceptación y deja la evidencia en
+`chaos/results/` (log completo, líneas del evento por servicio y un
+`*-summary.env` por corrida para agregar repeticiones):
+
+| Prueba | Script | Sistemas | Veredicto |
+|---|---|---|---|
+| AP5 | [`chaos/ap5-capture.sh`](../chaos/ap5-capture.sh) | A y B | Medición (sin PASS/FAIL): neto por servidor |
+| AP6 | [`chaos/ap6-idempotency.sh`](../chaos/ap6-idempotency.sh) | B | PASS/FAIL por criterio, sale ≠ 0 si alguno falla |
+| AP7 | [`chaos/ap7-dead-letter.sh`](../chaos/ap7-dead-letter.sh) | B | PASS/FAIL por criterio, sale ≠ 0 si alguno falla |
+
+Despliegue requerido antes de correrlos:
+
+- **AP6:** go-data-management con `feat/ap6-duplicate-trace`. Agrega la traza
+  del duplicado (`insert ignorado, ack` + `dm_messages_ignored_total`).
+- **O6** (`netem-delay-ew-um.sh`, no es parte de este documento pero comparte el
+  evento): go-early-warning con `feat/o6-o7-alert-path-evidence`.
+
+Las secciones de abajo describen qué hace cada prueba y por qué. Donde el
+script se aparta del procedimiento manual original, está marcado con
+**Corrección**.
+
+> **Corrección común (evento representativo).** El evento original no traía
+> `schema_version` ni `received_at`. early-warning lo aceptaba, pero el binding
+> `sensors.#` también lo entrega a `data_management.persist`, que valida el
+> contrato y manda los envelopes inválidos a la DLQ. Cada evento de prueba
+> mandaba **2 mensajes a `sensors.dead_letter`**: AP7 (criterio "+1") habría
+> leído +3, y AP6 no podía verificar la lectura persistida. El evento de
+> [`chaos/lib/event.sh`](../chaos/lib/event.sh) lleva el envelope completo
+> (`schema_version: "1.0"`, igual que data-receiving) y es válido para ambos
+> consumidores. Además, un publish que el broker no enruta (`routed:false`)
+> ahora es un error, no un evento perdido en silencio.
+
 ---
 
 ## AP5 — Volumen transferido y llamadas por evento
@@ -105,7 +140,23 @@ una lectura base y una segunda con +100 mm a los 60 s.
    ```
 
 6. **Repetir idéntico contra el Sistema A** (`SSH_ORCHESTRATOR=native`,
-   `204.168.203.32`), con el mismo evento.
+   `204.168.203.32`), con el mismo evento. `publish-event.sh` y
+   `ap5-capture.sh` publican en A por la Management API del host
+   (`RABBITMQ_MGMT_USER` / `RABBITMQ_MGMT_PASS`): A usa la misma cola, el mismo
+   exchange, el mismo formato y los mismos umbrales de `shangtan`.
+
+> **Corrección (interfaz de captura).** `tcpdump -i any` en el nodo k3s cuenta
+> cada paquete entre pods 2 o 3 veces (veth de origen, bridge `cni0`, veth de
+> destino); en A, el tráfico entre procesos del mismo host pasa una sola vez por
+> `lo`. Comparar así infla B ×2–×3 por un artefacto de captura. El script
+> captura en `cni0` en B (en modo promiscuo ve cada trama reenviada una vez) y
+> en `lo` en A.
+>
+> **Corrección (fondo).** "En reposo" no es "sin tráfico": los exporters
+> consultan MySQL y Redis en cada scrape, AMQP manda heartbeats, kubelet sondea
+> los pods. El script hace una captura de reposo de la misma duración y reporta
+> el **neto** (evento − reposo) por servidor. Como el fondo no es constante,
+> reportar mediana y rango de ≥ 3 corridas.
 
 ### AP5.4 — Qué se reporta
 
@@ -227,10 +278,27 @@ Esperar ~5 s entre inyecciones es suficiente.
 Los cuatro deben cumplirse. El primero es la evidencia fuerte: convierte «no
 pasó nada» en «el sistema detectó el duplicado y lo descartó deliberadamente».
 
-> **Nota sobre data-management.** La misma prueba aplica a la cola
-> `data_management.persist` para verificar que no se duplica la *lectura*
-> persistida. Ese servicio usa `INSERT IGNORE` keyed por `message_id`; verificar
-> si emite una traza equivalente antes de dar la prueba por cubierta ahí.
+> **Nota sobre data-management (resuelta).** La misma prueba aplica a la cola
+> `data_management.persist`: no se debe duplicar la *lectura* persistida. El
+> servicio usaba `INSERT IGNORE` keyed por `message_id` pero **no emitía
+> ninguna traza**: un duplicado era indistinguible de un insert exitoso, y solo
+> se podía verificar por ausencia de efecto. Con `feat/ap6-duplicate-trace`, el
+> repositorio distingue "0 filas afectadas" (`persistence.ErrIgnored`) y el
+> consumidor hace ack con `insert ignorado, ack` (con `trace_id`) y
+> `dm_messages_ignored_total`. `ap6-idempotency.sh` verifica ambos servicios.
+> Se llama "ignorado" y no "duplicado" porque `IGNORE` también descarta, por
+> ejemplo, una fila sin partición anual que la reciba; el log no afirma una
+> causa que el driver no informa.
+>
+> **Corrección (reinyección).** `SKIP_BASELINE=1 publish-event.sh` regenera la
+> lectura con timestamp nuevo: reinyecta el mismo `message_id`, no el mismo
+> mensaje. `ap6-idempotency.sh` guarda el envelope de la primera inyección
+> (`ap6-<epoch>-envelope.json`) y lo reinyecta byte a byte.
+>
+> **Corrección (conteo de filas).** `early_warning.alerts.message_id` es el UUID
+> de la *alerta*, no el `message_id` de la lectura. Contar
+> `COUNT(*) FROM alerts` sin filtro además mezcla alertas ajenas si hay carga.
+> El script cuenta por `sensor_id`, que es único por evento.
 
 ---
 
@@ -285,6 +353,37 @@ consistente y entra al camino de retry.
 > (`svc_early_warning`) sobre `early_warning.alerts`, correr la prueba y
 > restituirlo. Evita tumbar la BD, pero deja un cambio de permisos que hay que
 > acordarse de revertir. Elegir una y declararla.
+
+> **Corrección (mecanismo de fallo).** Ninguna de las dos opciones de arriba
+> sirve como está:
+>
+> - **Escalar MySQL a 0:** la liveness de early-warning es `GET /health`, que
+>   responde 503 sin MySQL. A los ~45 s kubelet reinicia EW: la prueba mide
+>   reinicios en vez de reintentos, y los logs del contenedor reiniciado se
+>   pierden.
+> - **Revocar INSERT:** el grant es a nivel de esquema (`early_warning.*`). No
+>   se puede revocar sobre una tabla, y MySQL no aplica cambios de privilegios de
+>   esquema a las conexiones ya abiertas del pool.
+>
+> `ap7-dead-letter.sh` crea un trigger `BEFORE INSERT` sobre
+> `early_warning.alerts` que hace `SIGNAL` **solo para el `sensor_id` del
+> evento**:
+>
+> - falla exactamente esa alerta y el resto del tráfico sigue;
+> - `/health` sigue sano;
+> - el error del log dice `AP7: fallo de persistencia inyectado`;
+> - el trap lo elimina al terminar.
+>
+> Antes de usarlo, el script **autoverifica** que un `INSERT IGNORE` (el que
+> hace `RecordAlert`) falle con ese `SIGNAL`, en una transacción que no se
+> confirma.
+>
+> **Corrección (conteo en la DLQ).** Después de la endurance,
+> `sensors.dead_letter` puede tener más de un millón de mensajes, y "+1" solo es
+> concluyente sin carga. El script enlaza además una cola sonda temporal a
+> `sensors.dlx`. Ahí identifica el mensaje por `message_id` y lee su `x-death`
+> (cola de origen `early_warning.evaluate`, motivo `rejected`). La cola sonda
+> expira sola a los 30 min.
 
 ### AP7.3 — Detalle que condiciona el conteo
 
@@ -398,3 +497,15 @@ Tres afirmaciones del plan no se sostienen contra el código y la infra actuales
 3. **AP7 no se ejercita con un mensaje malformado** — el JSON inválido se
    descarta sin reintentos por diseño. Hay que hacer fallar la persistencia de
    una alerta (§AP7.1).
+
+Y cuatro del procedimiento manual de este mismo documento, corregidas en los
+scripts:
+
+4. **El evento representativo ensuciaba la DLQ**: le faltaban `schema_version`
+   y `received_at`, y data-management lo mandaba a `sensors.dead_letter`
+   (ver "Corrección común").
+5. **`tcpdump -i any` en k3s cuenta cada paquete 2–3 veces**, y el fondo no es
+   cero en reposo (§AP5.3).
+6. **Escalar MySQL a 0 reinicia early-warning por liveness**, y revocar INSERT
+   no aplica al pool (§AP7.2).
+7. **data-management no dejaba traza del duplicado** (§AP6, nota).
