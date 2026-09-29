@@ -90,6 +90,16 @@ except urllib.error.HTTPError as e:
 PYEOF
 )
 
+  # El script viaja en base64 dentro de un one-liner, NO citado con printf %q.
+  # %q escribe un texto multilínea como $'...\n...', que es sintaxis de bash;
+  # _sudo_run lo ejecuta con `sudo sh -c`, y en el servidor sh es dash, que no
+  # la entiende: python3 recibía el literal "$import ...\n..." y fallaba con
+  # SyntaxError (encontrado en la primera corrida de AP5, 2026-09-29). El
+  # one-liner solo tiene [A-Za-z0-9+/=] y comillas simples, que cualquier sh
+  # interpreta igual.
+  local runner
+  runner="python3 -c 'import base64; exec(base64.b64decode(\"$(printf '%s' "$py" | base64 | tr -d '\n')\"))'"
+
   if [[ "$SSH_ORCHESTRATOR" == "k8s" ]]; then
     if [[ -z "$_RABBIT_POD" ]]; then
       _RABBIT_POD=$(_sudo_run "kubectl -n $K8S_NAMESPACE get pod -l $RABBITMQ_SELECTOR -o jsonpath='{.items[0].metadata.name}'")
@@ -98,9 +108,9 @@ PYEOF
         return 1
       fi
     fi
-    _sudo_run "kubectl -n $K8S_NAMESPACE exec $_RABBIT_POD -- python3 -c $(printf '%q' "$py")"
+    _sudo_run "kubectl -n $K8S_NAMESPACE exec $_RABBIT_POD -- $runner"
   else
-    _ssh_run "python3 -c $(printf '%q' "$py")"
+    _ssh_run "$runner"
   fi
 }
 
