@@ -105,14 +105,16 @@ echo "    Evidencia:  ${BASE}*"
 # Desde la Management API, igual en A y en B: mensajes en cola y tasa de
 # publicación. Con carga activa, el tráfico del evento se pierde en el ruido.
 overview=$(rabbit_api GET "/api/overview?columns=queue_totals,message_stats" || echo "")
+# Primero la respuesta: sin ella ready/pub_rate quedan vacíos y el cálculo de
+# abajo concluiría "en reposo: si" sobre datos que no existen.
+if ! grep -q '"queue_totals"' <<<"$overview"; then
+  echo "ERROR: no se pudo consultar la Management API de RabbitMQ (respuesta: ${overview:-<vacía>})." >&2
+  exit 1
+fi
 ready=$(grep -oE '"messages_ready"[[:space:]]*:[[:space:]]*[0-9]+' <<<"$overview" | head -1 | grep -oE '[0-9]+$' || true)
 pub_rate=$(grep -oE '"publish_details"[[:space:]]*:[[:space:]]*\{[[:space:]]*"rate"[[:space:]]*:[[:space:]]*[0-9.]+' <<<"$overview" | head -1 | grep -oE '[0-9.]+$' || true)
 at_rest=$(awk -v r="${ready:-0}" -v p="${pub_rate:-0}" 'BEGIN { print (r+0 == 0 && p+0 < 0.5 ? "si" : "no") }')
-echo "    Colas: ${ready:-?} listos, publicación ${pub_rate:-?} msg/s -> en reposo: $at_rest"
-if [[ -z "$overview" ]]; then
-  echo "ERROR: no se pudo consultar la Management API de RabbitMQ." >&2
-  exit 1
-fi
+echo "    Colas: ${ready:-?} listos, publicación ${pub_rate:-0} msg/s -> en reposo: $at_rest"
 if [[ "$at_rest" != "si" && "$AP5_FORCE" != "1" ]]; then
   echo "ERROR: el sistema no está en reposo. Detener el generador de carga y esperar a que" >&2
   echo "  las colas se vacíen (o AP5_FORCE=1 para capturar igual; queda marcado)." >&2
