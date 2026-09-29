@@ -86,7 +86,13 @@ SAMPLE_INTERVAL="${SAMPLE_INTERVAL:-5}"
 # no hay alertas => no hay llamadas a user-management => el breaker no abre.
 RABBITMQ_SELECTOR="${RABBITMQ_SELECTOR:-app=rabbitmq}"
 ALERT_PROJECT="${ALERT_PROJECT:-shangtan}"   # debe existir en defaultLevels() de EW
-ALERT_SENSOR_PREFIX="${ALERT_SENSOR_PREFIX:-chaos-um}"
+# El epoch en el prefijo es obligatorio para repetir el escenario: los
+# message_id son <prefijo>-r<ronda>-s<i>-a/b, y EW marca cada uno como procesado
+# por 24h (IDEMPOTENCY_TTL). Con un prefijo fijo, la segunda corrida del dia
+# repetia los mismos ids, EW los descartaba todos como duplicate_skipped, no
+# habia alertas y la precondicion abortaba — justo en las repeticiones que O6
+# exige. Tambien evita heredar las lineas base de Redis de la corrida anterior.
+ALERT_SENSOR_PREFIX="${ALERT_SENSOR_PREFIX:-chaos-um-$(date +%s)}"
 ALERT_ROUND_SLEEP="${ALERT_ROUND_SLEEP:-3}"
 # Sensores distintos por ronda: el breaker necesita fallos CONSECUTIVOS, y cada
 # alerta es un Invoke. Con FAIL_THRESHOLD sensores por ronda, una sola ronda ya
@@ -98,8 +104,21 @@ ALERT_SENSORS_PER_ROUND="${ALERT_SENSORS_PER_ROUND:-$FAIL_THRESHOLD}"
 # probaria el mismo camino.
 ALERT_EXCHANGE="${ALERT_EXCHANGE:-sensors.raw}"
 ALERT_ROUTING_KEY="${ALERT_ROUTING_KEY:-sensors.gnss}"
+EVENT_PROJECT="$ALERT_PROJECT"
+EVENT_EXCHANGE="$ALERT_EXCHANGE"
+EVENT_ROUTING_KEY="$ALERT_ROUTING_KEY"
+source "$SCRIPT_DIR/lib/event.sh"
+
+# Todo lo que imprime la corrida queda también en chaos/results/. Antes solo el
+# CSV y los snapshots sobrevivían a la terminal: el instante de apertura, el
+# tiempo de recuperación y el diagnóstico se perdían al cerrarla, y son
+# justamente lo que O6 pide reportar.
 
 _ssh_require
+RUN_TS=$(date +%s)
+RUN_LOG="$RESULTS_DIR/${LABEL}-run-${RUN_TS}.log"
+exec > >(tee -a "$RUN_LOG") 2>&1
+echo "    (log de la corrida -> $RUN_LOG)"
 
 case "$NETEM_SCOPE" in
   grpc|all) ;;
@@ -206,8 +225,8 @@ while read -r pid ip; do
 done <<<"$targets"
 
 # ── Driver de alertas ────────────────────────────────────────────────────────
-# Publica pares de lecturas GNSS por sensor en early_warning.evaluate vía la
-# Management API de RabbitMQ (no hay cliente AMQP en el nodo, pero sí curl).
+# Publica pares de lecturas GNSS por sensor en sensors.raw vía la Management API
+# de RabbitMQ (lib/event.sh: curl dentro del pod, sin rabbitmqadmin ni python).
 #
 # Cómo fuerza una alerta de forma determinista: EW calcula
 #   speed_mm_dia = (cum_2 - cum_1) / dt_segundos * 86400
@@ -215,27 +234,11 @@ done <<<"$targets"
 # después y con +100mm, da 100/60*86400 = 144000 mm/día, muy por encima del
 # umbral rojo de shangtan (20). Cada par => una alerta => un Invoke a
 # user-management. Sensor distinto por ronda para que no se pisen las líneas base.
-_amqp_publish() {
-  local body="$1"
-  # Se publica con la HTTP Management API via curl, NO con rabbitmqadmin: ese
-  # es un script Python que la imagen -alpine no trae, y depender de el haria
-  # fallar el driver EN SILENCIO (no se publica, no hay alertas, y el escenario
-  # concluiria "el breaker no abrio" por la razon equivocada).
-  #
-  # El request completo se arma ACA (maquina local, con jq o python) y viaja en
-  # base64 hasta el pod. Armarlo alla obligaria a escapar comillas a traves de
-  # ssh -> sudo -> kubectl exec -> sh -c, cuatro niveles anidados, que es
-  # inmantenible y se rompe con cualquier caracter del payload. base64 atraviesa
-  # todas esas capas sin escapar nada.
-  local req b64
-  req=$(REQ_BODY="$body" REQ_RK="$ALERT_ROUTING_KEY" python3 -c 'import json,os; print(json.dumps({"properties":{},"routing_key":os.environ["REQ_RK"],"payload":os.environ["REQ_BODY"],"payload_encoding":"string"}))')
-  b64=$(printf '%s' "$req" | base64 | tr -d '\n')
-  _sudo_run "pod=\$(kubectl -n $K8S_NAMESPACE get pod -l $RABBITMQ_SELECTOR -o jsonpath='{.items[0].metadata.name}'); \
-kubectl -n $K8S_NAMESPACE exec \$pod -- sh -c 'echo $b64 | base64 -d > /tmp/chaos-req.json && \
-curl -s -u \"\$RABBITMQ_DEFAULT_USER:\$RABBITMQ_DEFAULT_PASS\" -H content-type:application/json \
--X POST http://localhost:15672/api/exchanges/%2F/$ALERT_EXCHANGE/publish -d @/tmp/chaos-req.json'" >/dev/null 2>&1
-}
-
+#
+# Los envelopes llevan schema_version y received_at (event_reading_json): sin
+# ellos data-management los rechazaba por contrato y cada ronda mandaba
+# 2 x ALERT_SENSORS_PER_ROUND mensajes a sensors.dead_letter, ensuciando la DLQ
+# durante una prueba que no tiene nada que ver con ella.
 _alert_driver() {
   local round=0
   local end=$(( $(date +%s) + DURATION + 30 ))
@@ -244,13 +247,12 @@ _alert_driver() {
     local i=0
     while [[ "$i" -lt "$ALERT_SENSORS_PER_ROUND" ]]; do
       local sensor="${ALERT_SENSOR_PREFIX}-r${round}-s${i}"
-      local t1 t2
-      t1=$(date -u -d '@'"$(( $(date +%s) - 60 ))" '+%Y-%m-%dT%H:%M:%SZ')
-      t2=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-      # Lectura 1: fija la línea base.
-      _amqp_publish "{\"message_id\":\"${sensor}-a\",\"project_id\":\"${ALERT_PROJECT}\",\"sensor_id\":\"${sensor}\",\"sensor_type\":\"gnss\",\"timestamp\":\"${t1}\",\"payload\":{\"fix_quality\":\"rtk_fixed\",\"cumulative_displacement_mm\":0.0}}"
-      # Lectura 2: +100mm en 60s => ~144000 mm/día => cruza rojo.
-      _amqp_publish "{\"message_id\":\"${sensor}-b\",\"project_id\":\"${ALERT_PROJECT}\",\"sensor_id\":\"${sensor}\",\"sensor_type\":\"gnss\",\"timestamp\":\"${t2}\",\"payload\":{\"fix_quality\":\"rtk_fixed\",\"cumulative_displacement_mm\":100.0}}"
+      local now; now=$(date +%s)
+      # Lectura 1: fija la línea base. Lectura 2: +100mm en 60s => cruza rojo.
+      # Un publish fallido no corta el driver: la verificación de tasa previa
+      # y los contadores del resumen ya delatan un driver que no alerta.
+      event_publish "$(event_reading_json "${sensor}-a" "$sensor" "$(( now - 60 ))" "0.0")" >/dev/null 2>&1 || true
+      event_publish "$(event_reading_json "${sensor}-b" "$sensor" "$now" "100.0")" >/dev/null 2>&1 || true
       i=$(( i + 1 ))
     done
     sleep "$ALERT_ROUND_SLEEP"
@@ -342,12 +344,37 @@ if awk -v d="${alerts_delta:-0}" -v n="$FAIL_THRESHOLD" 'BEGIN{exit !(d < n)}'; 
   echo "  Inyectar ahora produciria un 'el breaker no abrio' que no dice nada sobre la" >&2
   echo "  resiliencia, solo que no hubo trafico: el mismo defecto que invalido el escenario" >&2
   echo "  contra data-analysis. Revisar:" >&2
-  echo "    - que el driver este publicando (rabbitmqadmin disponible en el pod?)" >&2
+  echo "    - que el driver este publicando: ./chaos/publish-event.sh debe responder 'enrutado'" >&2
   echo "    - que ALERT_PROJECT='${ALERT_PROJECT}' exista en defaultLevels() de EW" >&2
   echo "    - que el sistema este en regimen (no recien arrancado)" >&2
   echo "  Subir ALERT_SENSORS_PER_ROUND o bajar ALERT_ROUND_SLEEP si hace falta mas tasa." >&2
+  # El driver corre en background y el trap de limpieza todavia no esta puesto:
+  # sin esto seguiria publicando pares de lecturas hasta DURATION+30s.
+  _driver_stop
   exit 1
 fi
+
+# -- Precondicion: latencia de despacho instrumentada -------------------------
+# O6 pide la latencia de la alerta en modo degradado. Sale de
+# ew_alert_dispatch_duration_seconds (go-early-warning
+# feat/o6-o7-alert-path-evidence). Con alertas ya confirmadas arriba, si la serie
+# no existe es que el EW desplegado no tiene esa instrumentacion: la corrida
+# mediria apertura y recuperacion pero no la degradacion, y O6 quedaria abierta.
+dispatch_series=$(prom_query 'count(ew_alert_dispatch_duration_seconds_count) or vector(0)')
+if [[ "$dispatch_series" == "0" || "$dispatch_series" == "ERR" ]]; then
+  echo "" >&2
+  echo "ERROR: ew_alert_dispatch_duration_seconds no tiene series pese a que EW esta alertando." >&2
+  echo "  El EW desplegado no mide la latencia de despacho: desplegar go-early-warning con" >&2
+  echo "  feat/o6-o7-alert-path-evidence antes de correr este escenario." >&2
+  _driver_stop
+  exit 1
+fi
+
+# Linea base SANA de la misma metrica, para comparar la degradacion contra algo.
+# Ventana de 2m: con scrape de 15s, la ventana de verificacion (~20s) sola no
+# alcanza para un increase() confiable.
+healthy_dispatch_mean=$(prom_query 'sum(increase(ew_alert_dispatch_duration_seconds_sum[2m])) / sum(increase(ew_alert_dispatch_duration_seconds_count[2m]))')
+echo "    Latencia de despacho sana (media 2m, pre-fallo): ${healthy_dispatch_mean}s"
 
 echo ""
 echo "--- Snapshot pre-fallo + arranque del muestreo continuo ---"
@@ -444,6 +471,75 @@ calls_timeout=$(sampler_last_value "calls_timeout")
 calls_circuit_open=$(sampler_last_value "calls_circuit_open")
 calls_error=$(sampler_last_value "calls_error")
 
+# -- Degradacion y continuidad, leidas del CSV -------------------------------
+# Tres tramos, porque la latencia de la ruta de alertas cambia de regimen:
+#   1. [delay, apertura): user-management no responde y el breaker sigue
+#      cerrado. Cada alerta espera timeout x intentos + backoff ANTES de
+#      registrarse (la consulta de suscriptores va antes del INSERT).
+#   2. [apertura, ultimo instante abierto]: el breaker rechaza sin llamar; la
+#      alerta se registra sin push. Es la continuidad que exige CLAUDE.md 2.3.
+#   3. Todo el fallo: total de alertas en modo degradado y su media.
+# La latencia se observa al REGISTRAR la alerta, asi que una alerta que empezo
+# en el tramo 1 y termino tras la apertura cuenta en el tramo 2: el tramo 2
+# puede arrastrar algunas lentas al principio. Por eso tambien va el p95 maximo.
+_ratio() { awk -v n="$1" -v d="$2" 'BEGIN { if (n != "" && d != "" && d+0 > 0) printf "%.3f\n", n/d }'; }
+_window_mean() {
+  _ratio "$(sampler_delta dispatch_degraded_sum "$1" "$2")" "$(sampler_delta dispatch_degraded_count "$1" "$2")"
+}
+
+degraded_alerts=$(sampler_delta dispatch_degraded_count "$fail_start" "$recovery_start")
+degraded_mean=$(_window_mean "$fail_start" "$recovery_start")
+p95_max=$(sampler_max dispatch_p95_1m "$fail_start" "$recovery_start")
+
+mean_before_open=""
+mean_while_open=""
+alerts_while_open=""
+continuity="n/a (el breaker no abrio)"
+if [[ -n "$opened_at" ]]; then
+  open_abs=$(( fail_start + opened_at ))
+  last_open_rel=$(sampler_last_at "breaker_state" "1" "$fail_start")
+  last_open_abs=$(( fail_start + ${last_open_rel:-$opened_at} ))
+  mean_before_open=$(_window_mean "$fail_start" "$open_abs")
+  mean_while_open=$(_window_mean "$open_abs" "$last_open_abs")
+  alerts_while_open=$(sampler_delta alerts_published "$open_abs" "$last_open_abs")
+  if [[ -z "$alerts_while_open" ]]; then
+    continuity="sin datos (breaker abierto menos de dos muestras; bajar SAMPLE_INTERVAL)"
+  elif awk -v a="$alerts_while_open" 'BEGIN { exit !(a > 0) }'; then
+    continuity="verificada"
+  else
+    continuity="NO verificada"
+  fi
+fi
+
+summary_file="$RESULTS_DIR/${LABEL}-summary-${fail_start}.env"
+{
+  echo "system=B"
+  echo "fail_start=$fail_start"
+  echo "fail_start_utc=$(date -u -d "@$fail_start" '+%Y-%m-%dT%H:%M:%SZ')"
+  echo "delay_ms=$DELAY_MS"
+  echo "duration_s=$DURATION"
+  echo "netem_scope=$NETEM_SCOPE"
+  echo "um_timeout_ms=$UM_TIMEOUT_MS"
+  echo "fail_threshold=$FAIL_THRESHOLD"
+  echo "alerts_in_verify_window=$alerts_delta"
+  echo "breaker_opened_after_s=${opened_at:-}"
+  echo "recovery_s=$mttr"
+  echo "calls_ok=${calls_ok:-}"
+  echo "calls_timeout=${calls_timeout:-}"
+  echo "calls_circuit_open=${calls_circuit_open:-}"
+  echo "calls_error=${calls_error:-}"
+  echo "dispatch_mean_healthy_s=${healthy_dispatch_mean:-}"
+  echo "degraded_alerts=${degraded_alerts:-}"
+  echo "dispatch_mean_degraded_s=${degraded_mean:-}"
+  echo "dispatch_mean_before_open_s=${mean_before_open:-}"
+  echo "dispatch_mean_while_open_s=${mean_while_open:-}"
+  echo "dispatch_p95_max_s=${p95_max:-}"
+  echo "alerts_while_open=${alerts_while_open:-}"
+  echo "continuity=$continuity"
+  echo "samples_csv=$(basename "$csv")"
+  echo "run_log=$(basename "$RUN_LOG")"
+} > "$summary_file"
+
 echo ""
 echo "=== Resumen (sistema-B) ==="
 echo "Delay inyectado:              ${DELAY_MS}ms (timeout ${UM_TIMEOUT_MS}ms, umbral ${FAIL_THRESHOLD} fallos)"
@@ -452,10 +548,16 @@ echo "Circuito abierto a los:       ${opened_at:-nunca}s"
 echo "Tiempo de recuperacion:       ${mttr}"
 echo "Llamadas salientes a $BREAKER_TARGET (acumulado):"
 echo "  ok=${calls_ok:-0}  timeout=${calls_timeout:-0}  circuit_open=${calls_circuit_open:-0}  error=${calls_error:-0}"
+echo "Latencia de despacho (umbral cruzado -> alerta registrada):"
+echo "  sana, pre-fallo (media 2m):        ${healthy_dispatch_mean:-sin datos}s"
+echo "  degradada, breaker cerrado:        ${mean_before_open:-sin datos}s"
+echo "  degradada, breaker abierto:        ${mean_while_open:-sin datos}s"
+echo "  degradada, todo el fallo:          ${degraded_mean:-sin datos}s  (${degraded_alerts:-0} alertas sin push)"
+echo "  p95 maximo en la ventana (1m):     ${p95_max:-sin datos}s"
+echo "Continuidad operativa:        ${continuity} (${alerts_while_open:-0} alertas registradas con el breaker abierto)"
 echo "Serie temporal completa:      $csv"
 echo "Snapshots:                    $pre_snapshot / $post_snapshot"
-echo "Continuidad operativa: revisar ew_alerts_published_total en el CSV - debe seguir"
-echo "  creciendo con el breaker abierto (umbral simple sin push, CLAUDE.md 2.3)."
+echo "Resumen por corrida:          $summary_file"
 
 _ts() { local e="$1"; printf '%s  (UTC %s)' "$(date -d "@$e" '+%Y-%m-%d %H:%M:%S %Z')" "$(date -u -d "@$e" '+%H:%M:%S')"; }
 
@@ -490,6 +592,13 @@ if [[ -z "$opened_at" ]]; then
     echo "  CONSECUTIVOS: alguna llamada exitosa reseteo el contador entre medio. Subir el delay" >&2
     echo "  o la tasa de alertas (ALERT_SENSORS_PER_ROUND)." >&2
   fi
+  exit 1
+fi
+if [[ "$continuity" == "NO verificada" ]]; then
+  echo "" >&2
+  echo "ERROR: el breaker estuvo abierto y EW no registro ninguna alerta en ese tramo." >&2
+  echo "  CLAUDE.md 2.3 exige que la ruta de alertas siga emitiendo por umbral simple con la" >&2
+  echo "  dependencia caida. Revisar en el log de EW los db_record_failed / requeue del tramo." >&2
   exit 1
 fi
 if [[ "$mttr" != "ERR_PROM_UNREACHABLE" && "$mttr_status" -ne 0 ]]; then

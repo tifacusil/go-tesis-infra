@@ -35,8 +35,14 @@ y `tc` directo sobre el host.
 | `kill-rabbitmq.sh` | `pumba kill` sobre `rabbitmq-1` | Mide MTTR de reconexión de productores/consumidores AMQP y mensajes perdidos en el tramo sin broker |
 | `pause-data-management.sh` | `pumba pause` sobre `data-management-1` | Mide blast radius: ¿el balanceador (nginx round-robin) desvía tráfico a `data-management-2` sin errores visibles al cliente? |
 | `netem-delay-ew-da.sh` | `pumba netem delay` entre `early-warning-*` y `data-analysis-1` | Prueba el circuit breaker bajo latencia alta (no solo bajo down total) — CLAUDE.md §2.3: con el circuito abierto, Early Warning debe seguir alertando por umbral simple |
-| `publish-event.sh` | Publica **un** evento representativo (par de lecturas GNSS que cruza umbral) | Utilitario para AP5/AP6/AP7, no es un escenario de fallo. Ver [`../docs/ap5-ap6-ap7-procedimientos.md`](../docs/ap5-ap6-ap7-procedimientos.md) |
-| `netem-delay-ew-um.sh` | `tc netem delay` en los pods de `user-management` (vía SSH + nsenter) | Abre el breaker sobre la **ruta de alertas**, la única dependencia síncrona que puede ejercitarlo. Muestreo continuo + contadores de llamadas salientes. Ver sección dedicada abajo |
+| `publish-event.sh` | Publica **un** evento representativo (par de lecturas GNSS que cruza umbral), en A o en B | Utilitario para inyecciones manuales, no es un escenario de fallo |
+| `netem-delay-ew-um.sh` | `tc netem delay` en los pods de `user-management` (vía SSH + nsenter) | **O6.** Abre el breaker sobre la **ruta de alertas**, la única dependencia síncrona que puede ejercitarlo. Mide apertura, recuperación, latencia de degradación y continuidad. Ver sección dedicada abajo |
+| `ap5-capture.sh` | Captura reposo + captura con un evento, en el nodo (A: `lo`, B: `cni0`) | **AP5.** Bytes, paquetes y escrituras netas por servidor para el mismo evento en A y B |
+| `ap6-idempotency.sh` | Publica el evento y reinyecta el envelope de la alerta byte a byte | **AP6.** Deduplicación en early-warning y data-management, con criterios PASS/FAIL |
+| `ap7-dead-letter.sh` | Trigger que hace fallar el INSERT de la alerta del evento + cola sonda en `sensors.dlx` | **AP7.** Reintento acotado → DLQ, con la línea de tiempo de los intentos |
+
+Los tres `ap*.sh` automatizan [`../docs/ap5-ap6-ap7-procedimientos.md`](../docs/ap5-ap6-ap7-procedimientos.md)
+y comparten `lib/event.sh` (evento representativo, Management API, MySQL, logs).
 
 ## Uso
 
@@ -154,12 +160,37 @@ lee sin ambigüedad, y el script imprime el diagnóstico:
 "El interruptor no abrió" acompañado de "hubo 12 invocaciones, todas con timeout
 agotado" es un hallazgo. Sin ese dato no se concluye nada.
 
+### Latencia de degradación y continuidad (O6)
+
+`ew_alert_dispatch_duration_seconds{push_path}` mide umbral cruzado → alerta
+registrada en MySQL. `push_path="resolve_failed"` son las alertas emitidas en
+modo degradado (sin push). El CSV muestrea su `_count` y `_sum`, y el resumen
+calcula la media de tres tramos:
+
+| Tramo | Qué muestra |
+|---|---|
+| Delay puesto, breaker cerrado | Cada alerta espera timeout × intentos + backoff (~21 s con los defaults) **antes** del INSERT: la consulta de suscriptores va antes de la persistencia |
+| Breaker abierto | El breaker rechaza sin llamar; la alerta se registra casi a la latencia sana |
+| Todo el fallo | Total de alertas sin push y su media |
+
+La **continuidad** se verifica sola: alertas registradas mientras
+`breaker_state == 1`. Si el breaker abrió y no hubo ninguna, el script sale con
+error. Todo queda en `chaos/results/`:
+
+- `netem-delay-ew-um-run-<epoch>.log` — la salida completa de la corrida.
+- `netem-delay-ew-um-samples-<epoch>.csv` — la serie temporal.
+- `netem-delay-ew-um-summary-<epoch>.env` — una línea por indicador, para
+  agregar las repeticiones (mediana y rango).
+
 ### Requisito de versión
 
-Este escenario necesita el EW con el fix de instrumentación
-(`go-early-warning`, rama `fix/breaker-metric-user-management`): antes de él, el
-gauge `ew_circuit_breaker_state` solo se alimentaba para `data-analysis` y la
-serie de user-management **no existía**. El script avisa si no la encuentra.
+Este escenario necesita el EW con:
+
+- `fix/breaker-metric-user-management` (ya en `main`): sin él, el gauge
+  `ew_circuit_breaker_state` no tiene serie para user-management.
+- `feat/o6-o7-alert-path-evidence`: agrega `ew_alert_dispatch_duration_seconds`.
+  Sin ella el script aborta antes de inyectar, porque la corrida no mediría la
+  degradación y O6 quedaría abierta.
 
 ### Uso
 

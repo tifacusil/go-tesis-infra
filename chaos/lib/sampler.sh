@@ -36,8 +36,19 @@ messages_consumed=sum(ew_messages_consumed_total)
 messages_dropped=sum(ew_messages_dropped_total)
 duplicates_skipped=sum(ew_duplicates_skipped_total)
 queue_backlog=sum(rabbitmq_queue_messages_ready{queue="early_warning.evaluate"})
+dispatch_degraded_count=sum(ew_alert_dispatch_duration_seconds_count{push_path="resolve_failed"}) or vector(0)
+dispatch_degraded_sum=sum(ew_alert_dispatch_duration_seconds_sum{push_path="resolve_failed"}) or vector(0)
+dispatch_healthy_count=sum(ew_alert_dispatch_duration_seconds_count{push_path!="resolve_failed"}) or vector(0)
+dispatch_healthy_sum=sum(ew_alert_dispatch_duration_seconds_sum{push_path!="resolve_failed"}) or vector(0)
+dispatch_p95_1m=histogram_quantile(0.95, sum by (le) (rate(ew_alert_dispatch_duration_seconds_bucket[1m])))
 METRICS
 }
+# Las columnas dispatch_* son la latencia de degradación que pide O6: umbral
+# cruzado -> alerta registrada en MySQL (ew_alert_dispatch_duration_seconds).
+# Se muestrean _count y _sum crudos, no un promedio: la media exacta de
+# cualquier tramo sale de dividir sus deltas (sampler_delta), sin depender de la
+# ventana de rate() de Prometheus. push_path="resolve_failed" son las alertas
+# emitidas en modo degradado (user-management falló o el breaker estaba abierto).
 
 _sampler_pid=""
 _sampler_csv=""
@@ -179,6 +190,49 @@ sampler_first_at() {
   awk -F, -v col="$col" -v want="$want" -v t0="$t0" '
     NR==1 { for (i=1; i<=NF; i++) if ($i == col) idx=i; next }
     idx && $idx == want { print $1 - t0; exit }
+  ' "$csv"
+}
+
+# sampler_delta <columna> <desde_epoch> <hasta_epoch> — incremento de un
+# contador dentro de la ventana: último valor numérico con epoch <= hasta menos
+# el primero con epoch >= desde. Vacío si la ventana no tiene dos valores
+# numéricos (nunca 0: "no hubo datos" no es "no hubo eventos").
+sampler_delta() {
+  local col="$1" from="$2" to="$3"
+  local csv; csv=$(_sampler_resolve_csv)
+  [[ -f "$csv" ]] || return 0
+  awk -F, -v col="$col" -v from="$from" -v to="$to" '
+    NR==1 { for (i=1; i<=NF; i++) if ($i == col) idx=i; next }
+    !idx || $1 < from || $1 > to { next }
+    $idx ~ /^-?[0-9.]+([eE][-+]?[0-9]+)?$/ { if (!seen) { first=$idx; seen=1 }; last=$idx; n++ }
+    END { if (n >= 2) printf "%.6g\n", last - first }
+  ' "$csv"
+}
+
+# sampler_max <columna> <desde_epoch> <hasta_epoch> — máximo numérico de la
+# columna en la ventana (ej. el peor p95 de despacho). Vacío si no hay datos.
+sampler_max() {
+  local col="$1" from="$2" to="$3"
+  local csv; csv=$(_sampler_resolve_csv)
+  [[ -f "$csv" ]] || return 0
+  awk -F, -v col="$col" -v from="$from" -v to="$to" '
+    NR==1 { for (i=1; i<=NF; i++) if ($i == col) idx=i; next }
+    !idx || $1 < from || $1 > to { next }
+    $idx ~ /^-?[0-9.]+([eE][-+]?[0-9]+)?$/ { if (!seen || $idx+0 > m) m=$idx+0; seen=1 }
+    END { if (seen) printf "%.6g\n", m }
+  ' "$csv"
+}
+
+# sampler_last_at <columna> <valor> <t0> — último epoch en que la columna toma
+# el valor, como offset desde t0 (ej. el último instante con el breaker abierto).
+sampler_last_at() {
+  local col="$1" want="$2" t0="$3"
+  local csv; csv=$(_sampler_resolve_csv)
+  [[ -f "$csv" ]] || return 0
+  awk -F, -v col="$col" -v want="$want" -v t0="$t0" '
+    NR==1 { for (i=1; i<=NF; i++) if ($i == col) idx=i; next }
+    idx && $idx == want { last = $1 - t0 }
+    END { if (last != "") print last }
   ' "$csv"
 }
 
