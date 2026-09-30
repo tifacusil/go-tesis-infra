@@ -46,60 +46,42 @@ _iso_utc() { date -u -d "@$1" '+%Y-%m-%dT%H:%M:%SZ'; }
 # rabbitmqadmin; python3 sí, lo usa el propio broker. Con curl el publish no
 # ocurría y la prueba concluía por la razón equivocada.
 #
-# El script Python se arma acá y viaja como un solo argumento citado con %q; el
-# body va en base64 dentro de él, así atraviesa ssh -> sudo -> kubectl exec sin
-# escapar comillas en cada nivel. No hace falta python local.
+# El script Python se arma acá y viaja en base64 (ver rabbit_exec_py): así
+# atraviesa ssh -> sudo -> kubectl exec sin escapar comillas en cada nivel. No
+# hace falta python local.
 _RABBIT_POD=""
-rabbit_api() {
-  local method="$1" path="$2" body="${3:-}"
-  local b64="" auth_expr
-  [[ -n "$body" ]] && b64=$(printf '%s' "$body" | base64 | tr -d '\n')
 
+# _rabbit_auth_expr — expresión Python que produce el header Basic: en B sale
+# del entorno del pod (RABBITMQ_DEFAULT_*), en A de RABBITMQ_MGMT_USER/PASS.
+_rabbit_auth_expr() {
   case "$SSH_ORCHESTRATOR" in
     k8s)
-      auth_expr='base64.b64encode((os.environ["RABBITMQ_DEFAULT_USER"] + ":" + os.environ["RABBITMQ_DEFAULT_PASS"]).encode()).decode()'
+      echo 'base64.b64encode((os.environ["RABBITMQ_DEFAULT_USER"] + ":" + os.environ["RABBITMQ_DEFAULT_PASS"]).encode()).decode()'
       ;;
     native)
       if [[ -z "${RABBITMQ_MGMT_USER:-}" || -z "${RABBITMQ_MGMT_PASS:-}" ]]; then
         echo "ERROR: Sistema A requiere RABBITMQ_MGMT_USER y RABBITMQ_MGMT_PASS (Management API en el host)." >&2
         return 1
       fi
-      auth_expr="\"$(printf '%s' "${RABBITMQ_MGMT_USER}:${RABBITMQ_MGMT_PASS}" | base64 | tr -d '\n')\""
+      echo "\"$(printf '%s' "${RABBITMQ_MGMT_USER}:${RABBITMQ_MGMT_PASS}" | base64 | tr -d '\n')\""
       ;;
     *)
       echo "ERROR: SSH_ORCHESTRATOR='${SSH_ORCHESTRATOR:-}' — usar 'k8s' (Sistema B) o 'native' (Sistema A)." >&2
       return 1
       ;;
   esac
+}
 
-  local port="$RABBITMQ_MGMT_PORT"
-  [[ "$SSH_ORCHESTRATOR" == "k8s" ]] && port=15672
-  local py
-  py=$(cat <<PYEOF
-import base64, os, sys, urllib.error, urllib.request
-b64 = "$b64"
-data = base64.b64decode(b64) if b64 else None
-auth = $auth_expr
-r = urllib.request.Request("http://localhost:$port$path", data=data, method="$method",
-    headers={"Content-Type": "application/json", "Authorization": "Basic " + auth})
-try:
-    print(urllib.request.urlopen(r, timeout=15).read().decode())
-except urllib.error.HTTPError as e:
-    print("HTTP %d: %s" % (e.code, e.read().decode()[:300]), file=sys.stderr)
-    sys.exit(1)
-PYEOF
-)
+# _rabbit_mgmt_port — puerto de la Management API visto desde donde corre el
+# script: dentro del pod es siempre 15672; en el host de A, configurable.
+_rabbit_mgmt_port() {
+  if [[ "$SSH_ORCHESTRATOR" == "k8s" ]]; then echo 15672; else echo "$RABBITMQ_MGMT_PORT"; fi
+}
 
-  # El script viaja en base64 dentro de un one-liner, NO citado con printf %q.
-  # %q escribe un texto multilínea como $'...\n...', que es sintaxis de bash;
-  # _sudo_run lo ejecuta con `sudo sh -c`, y en el servidor sh es dash, que no
-  # la entiende: python3 recibía el literal "$import ...\n..." y fallaba con
-  # SyntaxError (encontrado en la primera corrida de AP5, 2026-09-29). El
-  # one-liner solo tiene [A-Za-z0-9+/=] y comillas simples, que cualquier sh
-  # interpreta igual.
-  local runner
-  runner="python3 -c 'import base64; exec(base64.b64decode(\"$(printf '%s' "$py" | base64 | tr -d '\n')\"))'"
-
+# rabbit_pod_exec <comando> — ejecuta un comando en el pod de RabbitMQ (B) o en
+# el host (A). El comando no debe tener saltos de línea (ver rabbit_exec_py).
+rabbit_pod_exec() {
+  local cmd="$1"
   if [[ "$SSH_ORCHESTRATOR" == "k8s" ]]; then
     if [[ -z "$_RABBIT_POD" ]]; then
       _RABBIT_POD=$(_sudo_run "kubectl -n $K8S_NAMESPACE get pod -l $RABBITMQ_SELECTOR -o jsonpath='{.items[0].metadata.name}'")
@@ -108,10 +90,48 @@ PYEOF
         return 1
       fi
     fi
-    _sudo_run "kubectl -n $K8S_NAMESPACE exec $_RABBIT_POD -- $runner"
+    _sudo_run "kubectl -n $K8S_NAMESPACE exec $_RABBIT_POD -- $cmd"
   else
-    _ssh_run "$runner"
+    _ssh_run "$cmd"
   fi
+}
+
+# rabbit_exec_py <script> — corre un script Python junto al broker.
+#
+# El script viaja en base64 dentro de un one-liner, NO citado con printf %q.
+# %q escribe un texto multilínea como $'...\n...', que es sintaxis de bash;
+# _sudo_run lo ejecuta con `sudo sh -c`, y en el servidor sh es dash, que no
+# la entiende: python3 recibía el literal "$import ...\n..." y fallaba con
+# SyntaxError (encontrado en la primera corrida de AP5, 2026-09-29). El
+# one-liner solo tiene [A-Za-z0-9+/=] y comillas simples, que cualquier sh
+# interpreta igual.
+rabbit_exec_py() {
+  local py="$1"
+  rabbit_pod_exec "python3 -u -c 'import base64; exec(base64.b64decode(\"$(printf '%s' "$py" | base64 | tr -d '\n')\"))'"
+}
+
+rabbit_api() {
+  local method="$1" path="$2" body="${3:-}"
+  local b64="" auth_expr
+  [[ -n "$body" ]] && b64=$(printf '%s' "$body" | base64 | tr -d '\n')
+  auth_expr=$(_rabbit_auth_expr) || return 1
+
+  local py
+  py=$(cat <<PYEOF
+import base64, os, sys, urllib.error, urllib.request
+b64 = "$b64"
+data = base64.b64decode(b64) if b64 else None
+auth = $auth_expr
+r = urllib.request.Request("http://127.0.0.1:$(_rabbit_mgmt_port)$path", data=data, method="$method",
+    headers={"Content-Type": "application/json", "Authorization": "Basic " + auth})
+try:
+    print(urllib.request.urlopen(r, timeout=15).read().decode())
+except urllib.error.HTTPError as e:
+    print("HTTP %d: %s" % (e.code, e.read().decode()[:300]), file=sys.stderr)
+    sys.exit(1)
+PYEOF
+)
+  rabbit_exec_py "$py"
 }
 
 # event_reading_json <message_id> <sensor_id> <epoch> <cumulative_mm> — un

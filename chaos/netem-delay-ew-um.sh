@@ -81,6 +81,7 @@ NETEM_IFACE="${NETEM_IFACE:-eth0}"
 UM_GRPC_PORT="${UM_GRPC_PORT:-9090}"
 NETEM_SCOPE="${NETEM_SCOPE:-grpc}"
 SAMPLE_INTERVAL="${SAMPLE_INTERVAL:-5}"
+VERIFY_WINDOW="${VERIFY_WINDOW:-45}"
 
 # Driver de alertas: publica pares de lecturas GNSS en la cola de EW. Sin esto
 # no hay alertas => no hay llamadas a user-management => el breaker no abre.
@@ -229,48 +230,111 @@ while read -r pid ip; do
 done <<<"$targets"
 
 # ── Driver de alertas ────────────────────────────────────────────────────────
-# Publica pares de lecturas GNSS por sensor en sensors.raw vía la Management API
-# de RabbitMQ (lib/event.sh: python3 dentro del pod; la imagen -alpine no trae
-# curl ni rabbitmqadmin).
+# Publica pares de lecturas GNSS por sensor en sensors.raw. Corre ENTERO dentro
+# del pod de RabbitMQ: un solo kubectl exec lanza un script Python que publica
+# todas las rondas contra la Management API por localhost.
+#
+# Por qué dentro del pod: la versión anterior hacía un viaje completo por cada
+# lectura (ssh -> sudo -> kubectl exec -> arranque de python, ~2-4 s). Una ronda
+# de 5 sensores = 10 lecturas = 20-40 s, y la ventana de verificación veía 0 o 1
+# alertas: la precondición abortaba siempre (primeras corridas de O6,
+# 2026-09-29). Dentro del pod una ronda tarda milisegundos y la tasa es la
+# configurada (ALERT_SENSORS_PER_ROUND cada ALERT_ROUND_SLEEP s).
 #
 # Cómo fuerza una alerta de forma determinista: EW calcula
 #   speed_mm_dia = (cum_2 - cum_1) / dt_segundos * 86400
-# La primera lectura solo fija la línea base (previous_none). La segunda, 60s
-# después y con +100mm, da 100/60*86400 = 144000 mm/día, muy por encima del
-# umbral rojo de shangtan (20). Cada par => una alerta => un Invoke a
+# La primera lectura solo fija la línea base (previous_none). La segunda, con
+# timestamp 60s posterior y +100mm, da 100/60*86400 = 144000 mm/día, muy por
+# encima del umbral rojo de shangtan (20). Cada par => una alerta => un Invoke a
 # user-management. Sensor distinto por ronda para que no se pisen las líneas base.
 #
-# Los envelopes llevan schema_version y received_at (event_reading_json): sin
-# ellos data-management los rechazaba por contrato y cada ronda mandaba
-# 2 x ALERT_SENSORS_PER_ROUND mensajes a sensors.dead_letter, ensuciando la DLQ
-# durante una prueba que no tiene nada que ver con ella.
+# Las lecturas base de la ronda se publican ANTES que las de alerta, con
+# DRIVER_BASELINE_GAP segundos entre medio: EW tiene 2 réplicas, y sin la pausa
+# la lectura de alerta puede evaluarse en la otra réplica antes de que la base
+# esté en Redis (previous_none, sin alerta).
+#
+# Los envelopes llevan schema_version y received_at: sin ellos data-management
+# los rechaza por contrato y los manda a sensors.dead_letter.
+#
+# Se detiene con un archivo centinela en el pod (no matando el ssh local, que no
+# garantiza que el proceso remoto muera) y tiene además un tope propio de
+# duración. Su progreso por ronda queda en el log del driver, como evidencia.
+DRIVER_BASELINE_GAP="${DRIVER_BASELINE_GAP:-2}"
+DRIVER_STOP="/tmp/chaos-driver-${RUN_TS}.stop"
+DRIVER_LOG="$RESULTS_DIR/${LABEL}-driver-${RUN_TS}.log"
+
 _alert_driver() {
-  local round=0
-  local end=$(( $(date +%s) + DURATION + 30 ))
-  while [[ "$(date +%s)" -lt "$end" ]]; do
-    round=$(( round + 1 ))
-    local i=0
-    while [[ "$i" -lt "$ALERT_SENSORS_PER_ROUND" ]]; do
-      local sensor="${ALERT_SENSOR_PREFIX}-r${round}-s${i}"
-      local now; now=$(date +%s)
-      # Lectura 1: fija la línea base. Lectura 2: +100mm en 60s => cruza rojo.
-      # Un publish fallido no corta el driver: la verificación de tasa previa
-      # y los contadores del resumen ya delatan un driver que no alerta.
-      event_publish "$(event_reading_json "${sensor}-a" "$sensor" "$(( now - 60 ))" "0.0")" >/dev/null 2>&1 || true
-      event_publish "$(event_reading_json "${sensor}-b" "$sensor" "$now" "100.0")" >/dev/null 2>&1 || true
-      i=$(( i + 1 ))
-    done
-    sleep "$ALERT_ROUND_SLEEP"
-  done
+  local auth py
+  auth=$(_rabbit_auth_expr) || return 1
+  py=$(cat <<PYEOF
+import json, os, time, urllib.request, base64
+auth = $auth
+url = "http://127.0.0.1:$(_rabbit_mgmt_port)/api/exchanges/%2F/${ALERT_EXCHANGE}/publish"
+hdr = {"Content-Type": "application/json", "Authorization": "Basic " + auth}
+stop = "${DRIVER_STOP}"
+end = time.time() + ${VERIFY_WINDOW} + ${DURATION} + 240
+def iso(t): return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+def env(mid, sensor, ts, cum):
+    return {"schema_version": "${EVENT_SCHEMA_VERSION}", "message_id": mid, "project_id": "${ALERT_PROJECT}",
+            "sensor_id": sensor, "sensor_type": "gnss", "timestamp": iso(ts), "received_at": iso(time.time()),
+            "payload": {"fix_quality": "rtk_fixed", "cumulative_displacement_mm": cum}}
+sent = routed = errors = 0
+def pub(e):
+    global sent, routed, errors
+    body = json.dumps({"properties": {"delivery_mode": 2, "content_type": "application/json"},
+                       "routing_key": "${ALERT_ROUTING_KEY}", "payload": json.dumps(e, separators=(",", ":")),
+                       "payload_encoding": "string"}).encode()
+    try:
+        r = urllib.request.urlopen(urllib.request.Request(url, data=body, method="POST", headers=hdr), timeout=10)
+        sent += 1
+        if json.loads(r.read().decode()).get("routed") is True:
+            routed += 1
+    except Exception as ex:
+        errors += 1
+        print("error: %s" % ex, flush=True)
+rnd = 0
+while time.time() < end and not os.path.exists(stop):
+    rnd += 1
+    now = int(time.time())
+    sensors = ["${ALERT_SENSOR_PREFIX}-r%d-s%d" % (rnd, i) for i in range(${ALERT_SENSORS_PER_ROUND})]
+    for s in sensors:
+        pub(env(s + "-a", s, now - 60, 0.0))
+    time.sleep(${DRIVER_BASELINE_GAP})
+    for s in sensors:
+        pub(env(s + "-b", s, now, 100.0))
+    print("%s ronda=%d publicados=%d enrutados=%d errores=%d" % (iso(time.time()), rnd, sent, routed, errors), flush=True)
+    time.sleep(${ALERT_ROUND_SLEEP})
+if os.path.exists(stop):
+    os.remove(stop)
+print("fin rondas=%d publicados=%d enrutados=%d errores=%d" % (rnd, sent, routed, errors), flush=True)
+PYEOF
+)
+  rabbit_exec_py "$py"
 }
 
 driver_pid=""
+_driver_start() {
+  # El pod se resuelve acá, en el shell principal, para que el driver (subshell)
+  # y _driver_stop compartan el mismo _RABBIT_POD sin resolverlo dos veces.
+  rabbit_pod_exec "rm -f $DRIVER_STOP" >/dev/null
+  _alert_driver > "$DRIVER_LOG" 2>&1 &
+  driver_pid=$!
+}
 _driver_stop() {
-  if [[ -n "$driver_pid" ]] && kill -0 "$driver_pid" 2>/dev/null; then
+  [[ -n "$driver_pid" ]] || return 0
+  rabbit_pod_exec "touch $DRIVER_STOP" >/dev/null 2>&1 || true
+  local waited=0
+  while kill -0 "$driver_pid" 2>/dev/null && [[ "$waited" -lt 20 ]]; do
+    sleep 1
+    waited=$(( waited + 1 ))
+  done
+  if kill -0 "$driver_pid" 2>/dev/null; then
     kill "$driver_pid" 2>/dev/null || true
-    wait "$driver_pid" 2>/dev/null || true
   fi
+  wait "$driver_pid" 2>/dev/null || true
   driver_pid=""
+  [[ -s "$DRIVER_LOG" ]] && echo "    Driver: $(tail -1 "$DRIVER_LOG")"
+  return 0
 }
 
 _netem_clear() {
@@ -332,14 +396,17 @@ _cleanup() {
 # abrio" nunca se confunda con "no habia trafico".
 echo ""
 echo "--- Arrancando driver de alertas y verificando que EW este alertando ---"
-_alert_driver &
-driver_pid=$!
+_driver_start
 
-verify_window=$(( SAMPLE_INTERVAL * 4 ))
+# VERIFY_WINDOW (45s por defecto) y no 20s: Prometheus scrapea cada 15s, y en
+# una ventana de 20s el contador puede avanzar una sola vez o ninguna aunque EW
+# este alertando.
+verify_window="$VERIFY_WINDOW"
 alerts_before=$(prom_query 'sum(ew_alerts_published_total) or vector(0)')
 sleep "$verify_window"
 alerts_after=$(prom_query 'sum(ew_alerts_published_total) or vector(0)')
 alerts_delta=$(awk -v a="${alerts_after:-0}" -v b="${alerts_before:-0}" 'BEGIN{d=a-b; print (d<0?0:d)}' 2>/dev/null || echo 0)
+echo "    Driver: $(tail -1 "$DRIVER_LOG" 2>/dev/null || echo 'sin salida todavia')"
 echo "    Alertas emitidas en ${verify_window}s de verificacion: ${alerts_delta}"
 
 if awk -v d="${alerts_delta:-0}" -v n="$FAIL_THRESHOLD" 'BEGIN{exit !(d < n)}'; then
@@ -349,12 +416,13 @@ if awk -v d="${alerts_delta:-0}" -v n="$FAIL_THRESHOLD" 'BEGIN{exit !(d < n)}'; 
   echo "  Inyectar ahora produciria un 'el breaker no abrio' que no dice nada sobre la" >&2
   echo "  resiliencia, solo que no hubo trafico: el mismo defecto que invalido el escenario" >&2
   echo "  contra data-analysis. Revisar:" >&2
-  echo "    - que el driver este publicando: ./chaos/publish-event.sh debe responder 'enrutado'" >&2
+  echo "    - la linea 'Driver:' de arriba: enrutados debe crecer. Si enrutados=0 o hay errores," >&2
+  echo "      ver el log del driver: $DRIVER_LOG" >&2
   echo "    - que ALERT_PROJECT='${ALERT_PROJECT}' exista en defaultLevels() de EW" >&2
   echo "    - que el sistema este en regimen (no recien arrancado)" >&2
   echo "  Subir ALERT_SENSORS_PER_ROUND o bajar ALERT_ROUND_SLEEP si hace falta mas tasa." >&2
   # El driver corre en background y el trap de limpieza todavia no esta puesto:
-  # sin esto seguiria publicando pares de lecturas hasta DURATION+30s.
+  # sin esto seguiria publicando pares de lecturas hasta su tope de duracion.
   _driver_stop
   exit 1
 fi
@@ -543,6 +611,7 @@ summary_file="$RESULTS_DIR/${LABEL}-summary-${fail_start}.env"
   echo "continuity=$continuity"
   echo "samples_csv=$(basename "$csv")"
   echo "run_log=$(basename "$RUN_LOG")"
+  echo "driver_log=$(basename "$DRIVER_LOG")"
 } > "$summary_file"
 
 echo ""
