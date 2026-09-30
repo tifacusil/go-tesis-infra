@@ -69,6 +69,9 @@ TRIGGER="ap7_block_${RUN_TS}"
 PROBE_QUEUE="ap7.probe.${RUN_TS}"
 EW_RAW="${BASE}-ew-raw.tmp"
 
+# Con set -e un comando que falla corta el script sin decir cual: esto lo nombra.
+trap 'echo "ERROR: fallo el comando de la linea $LINENO de $(basename "$0") (ver la salida de arriba)" >&2' ERR
+
 _ssh_require
 # En modo local (CHAOS_LOCAL, corriendo en el nodo de B) el orquestador es k8s
 # por definicion: _ssh_require ya verifico que kubectl hable con el cluster.
@@ -126,12 +129,27 @@ echo "    Consumo EW: ${rate} msg/s -> en reposo: ${at_rest}"
 # ── Preparación del fallo ─────────────────────────────────────────────────────
 echo ""
 echo "--- 1. Trigger de fallo sobre early_warning.alerts (solo sensor_id=$EVENT_ID) ---"
+# Triggers de corridas anteriores que no llegaron a limpiarse (script cortado,
+# o el fallo de mysql_query del 2026-09-29). Cada uno solo afecta al sensor de
+# su propia corrida, pero no deben quedar en la base.
+stale=$(mysql_query "$EW_MYSQL_POD" "SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='early_warning' AND TRIGGER_NAME LIKE 'ap7_block_%'")
+if [[ "$stale" == *ERROR* ]]; then
+  echo "ERROR: no se pudo consultar MySQL de early-warning: $stale" >&2
+  exit 1
+fi
+for t in $stale; do
+  mysql_query "$EW_MYSQL_POD" "DROP TRIGGER IF EXISTS early_warning.$t" >/dev/null
+  echo "    Eliminado trigger viejo: $t"
+done
+
+# Se marca ANTES de crearlo: si el script muere entre el CREATE y la marca, la
+# limpieza igual intenta el DROP (IF EXISTS, así que no falla si no existe).
+trigger_created=1
 out=$(mysql_query "$EW_MYSQL_POD" "CREATE TRIGGER early_warning.$TRIGGER BEFORE INSERT ON early_warning.alerts FOR EACH ROW BEGIN IF NEW.sensor_id = '$EVENT_ID' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'AP7: fallo de persistencia inyectado'; END IF; END")
 if [[ "$out" == *ERROR* ]]; then
   echo "ERROR: no se pudo crear el trigger: $out" >&2
   exit 1
 fi
-trigger_created=1
 
 # Autoverificación: el mismo INSERT IGNORE que hace RecordAlert, en una
 # transacción que no se confirma. Tiene que FALLAR con el SIGNAL; si pasa, IGNORE

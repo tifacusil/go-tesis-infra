@@ -56,6 +56,9 @@ REST_RATE="${REST_RATE:-0.05}"
 RUN_TS=$(date +%s)
 BASE="$RESULTS_DIR/ap6-${RUN_TS}"
 
+# Con set -e un comando que falla corta el script sin decir cual: esto lo nombra.
+trap 'echo "ERROR: fallo el comando de la linea $LINENO de $(basename "$0") (ver la salida de arriba)" >&2' ERR
+
 _ssh_require
 # En modo local (CHAOS_LOCAL, corriendo en el nodo de B) el orquestador es k8s
 # por definicion: _ssh_require ya verifico que kubectl hable con el cluster.

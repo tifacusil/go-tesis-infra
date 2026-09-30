@@ -191,10 +191,17 @@ rabbit_queue_messages() {
 # mysql_query <pod> <sql> — ejecuta SQL como root en el pod MySQL de un servicio
 # (Sistema B) y devuelve filas sin cabecera, separadas por tab. La contraseña se
 # expande DENTRO del pod: nunca pasa por esta máquina.
+#
+# NUNCA falla: devuelve la salida (incluido el texto de un ERROR de MySQL) y el
+# llamador decide. La versión anterior filtraba la advertencia de -p con
+# `grep -v`; un statement exitoso sin salida (CREATE TRIGGER) dejaba a grep sin
+# líneas, grep devolvía 1 y `set -e` mataba el script en silencio — justo
+# después de crear el trigger de AP7, que así quedaba sin borrar (primeras
+# corridas de AP7, 2026-09-29). MYSQL_PWD evita la advertencia sin filtrar nada.
 mysql_query() {
   local pod="$1" sql="$2"
   _kubectl -n "$K8S_NAMESPACE" exec "$pod" -- sh -c \
-    "mysql -uroot -p\"\$MYSQL_ROOT_PASSWORD\" -N -B --delimiter=// -e \"$sql\" 2>&1 | grep -v 'Using a password on the command line'"
+    "MYSQL_PWD=\"\$MYSQL_ROOT_PASSWORD\" mysql -uroot -N -B --delimiter=// -e \"$sql\" 2>&1" || true
 }
 
 # service_logs_since <app_label> <epoch> — logs de TODAS las réplicas de un
