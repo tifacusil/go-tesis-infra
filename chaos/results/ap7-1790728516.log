@@ -1,0 +1,11 @@
+=== AP7 — retry acotado -> dead letter (Sistema B) ===
+    event_id:   ap7-1790728516   (sensor_id del evento)
+    message_id: ap7-1790728516-b   (el que debe terminar en la DLQ)
+    Reintentos: CONSUMER_MAX_RETRIES=3
+    Evidencia:  /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/ap7-1790728516*
+    Consumo EW: 0 msg/s -> en reposo: si
+
+--- 1. Trigger de fallo sobre early_warning.alerts (solo sensor_id=ap7-1790728516) ---
+command terminated with exit code 1
+
+--- Limpieza: trigger y cola sonda ---

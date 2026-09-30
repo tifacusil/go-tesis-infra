@@ -1,0 +1,1 @@
+{"schema_version":"1.0","message_id":"ap6-1790722268-b","project_id":"shangtan","sensor_id":"ap6-1790722268","sensor_type":"gnss","timestamp":"2026-09-29T22:51:17Z","received_at":"2026-09-29T22:51:26Z","payload":{"fix_quality":"rtk_fixed","cumulative_displacement_mm":100.0}}

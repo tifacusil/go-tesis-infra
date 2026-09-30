@@ -1,0 +1,24 @@
+    (log de la corrida -> /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/netem-delay-ew-um-run-1790728603.log)
+=== Escenario: netem delay 9000ms en user-management (Sistema B / k3s) ===
+    Servidor:      gotesis@178.105.104.95 (namespace landslide)
+    Delay:         9000ms  (timeout por llamada: 5000ms => cada intento corta)
+    Duración:      240s   (muestreo cada 5s)
+    Umbral:        5 fallos consecutivos para abrir
+    Scope:         grpc — solo el puerto 9090 (respuestas a EW). Las probes de
+                   kubelet no se tocan: user-management sigue vivo y el breaker abre por
+                   LATENCIA, con el peer respondiendo lento.
+    Driver:        alertas GNSS via AMQP (project=shangtan, 5 sensores/ronda)
+    Target:        pid=999117 pod_ip=10.42.0.98
+
+--- Arrancando driver de alertas y verificando que EW este alertando ---
+    Alertas emitidas en 20s de verificacion: 1
+
+ERROR: el sistema emitio 1 alertas en la ventana de verificacion, y hacen
+  falta al menos 5 fallos CONSECUTIVOS para abrir el breaker.
+  Inyectar ahora produciria un 'el breaker no abrio' que no dice nada sobre la
+  resiliencia, solo que no hubo trafico: el mismo defecto que invalido el escenario
+  contra data-analysis. Revisar:
+    - que el driver este publicando: ./chaos/publish-event.sh debe responder 'enrutado'
+    - que ALERT_PROJECT='shangtan' exista en defaultLevels() de EW
+    - que el sistema este en regimen (no recien arrancado)
+  Subir ALERT_SENSORS_PER_ROUND o bajar ALERT_ROUND_SLEEP si hace falta mas tasa.

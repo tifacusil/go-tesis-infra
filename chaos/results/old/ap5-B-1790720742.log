@@ -1,0 +1,13 @@
+=== AP5 — volumen por evento (Sistema B) ===
+    Interfaz:   cni0
+    Filtro:     tcp and (port 5672 or port 3306 or port 6379 or port 9090 or port 50051)
+    Ventanas:   reposo 30s + evento 30s
+    Evento:     ap5-b-1790720742 (lectura base + lectura que alerta, project=shangtan)
+    Evidencia:  /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/ap5-B-1790720742*
+  File "<string>", line 1
+    $import base64, os, sys, urllib.error, urllib.request\nb64 = ""\ndata = base64.b64decode(b64) if b64 else None\nauth = base64.b64encode((os.environ["RABBITMQ_DEFAULT_USER"] + ":" + os.environ["RABBITMQ_DEFAULT_PASS"]).encode()).decode()\nr = urllib.request.Request("http://localhost:15672/api/overview?columns=queue_totals,message_stats", data=data, method="GET",\n    headers={"Content-Type": "application/json", "Authorization": "Basic " + auth})\ntry:\n    print(urllib.request.urlopen(r, timeout=15).read().decode())\nexcept urllib.error.HTTPError as e:\n    print("HTTP %d: %s" % (e.code, e.read().decode()[:300]), file=sys.stderr)\n    sys.exit(1)
+    ^
+SyntaxError: invalid syntax
+command terminated with exit code 1
+    Colas: ? listos, publicación ? msg/s -> en reposo: si
+ERROR: no se pudo consultar la Management API de RabbitMQ.

@@ -1,0 +1,34 @@
+=== AP5 — volumen por evento (Sistema B) ===
+    Interfaz:   cni0
+    Filtro:     tcp and (port 5672 or port 3306 or port 6379 or port 9090 or port 50051)
+    Ventanas:   reposo 30s + evento 30s
+    Evento:     ap5-b-1790721691 (lectura base + lectura que alerta, project=shangtan)
+    Evidencia:  /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/ap5-B-1790721691*
+    Colas: 0 listos, publicación 0.0 msg/s -> en reposo: si
+
+--- Captura: reposo (30s) ---
+    Captura cerrada (inicio 2026-09-29T22:41:48Z).
+    1255 paquetes.
+
+--- Captura: evento (30s) ---
+    Evento publicado a las 2026-09-29T22:42:44Z.
+    Captura cerrada (inicio 2026-09-29T22:42:29Z).
+    1336 paquetes.
+
+=== Tráfico por servidor (payload TCP) — Sistema B ===
+  servidor                                        pkt_ev      B_ev     B_rep    B_neto   escr_neto
+  mysql-data-management-0:3306 (10.42.0.103.3306)       151     88704     87200      1504           6
+  mysql-user-management-0:3306 (10.42.0.105.3306)       158     96369     87337      9032          15
+  mysql-early-warning-0:3306 (10.42.0.106.3306)       180     89563     90762     -1199          -9
+  mysql-project-management-0:3306 (10.42.0.107.3306)       125     86852     86852         0           0
+  redis-0:6379 (10.42.0.114.6379)                    267     48821     45915      2906          22
+  rabbitmq-0:5672 (10.42.0.120.5672)                 405     12522     10440      2082           1
+  prometheus-6489f5b487-8wx8n:9090 (10.42.0.97.9090)        40      1096      1096         0           0
+  user-management-774cff9b5b-qcsnr:9090 (10.42.0.98.9090)        10       726         0       726           3
+  -----
+  Total evento: 424653 B | reposo: 409602 B | NETO atribuible al evento: 15051 B, 81 paquetes
+  Escrituras cliente->servidor netas (proxy de llamadas): 38
+  Servidores con tráfico neto > 0 (saltos): 5
+
+Evidencia: /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/ap5-B-1790721691-{reposo,evento}.{pcap,txt,agg}, /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/ap5-B-1790721691.log, /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/ap5-B-1790721691-summary.env
+Declarar al reportar: evento elegido, sistema en reposo (si), duración (30s x 2).

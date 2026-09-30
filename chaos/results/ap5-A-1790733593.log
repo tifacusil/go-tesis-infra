@@ -1,0 +1,31 @@
+=== AP5 — volumen por evento (Sistema A) ===
+    Interfaz:   lo
+    Filtro:     tcp and (port 5672 or port 3306 or port 6379 or port 8085)
+    Ventanas:   reposo 30s + evento 30s
+    Evento:     ap5-a-1790733593 (lectura base + lectura que alerta, project=shangtan)
+    Evidencia:  /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/ap5-A-1790733593*
+    Colas: 0 listos, publicación 0 msg/s -> en reposo: si
+
+--- Captura: reposo (30s) ---
+    Captura cerrada (inicio 2026-09-30T02:00:00Z).
+    277 paquetes.
+
+--- Captura: evento (30s) ---
+    Evento publicado a las 2026-09-30T02:00:49Z.
+    Captura cerrada (inicio 2026-09-30T02:00:41Z).
+    346 paquetes.
+
+=== Tráfico por servidor (payload TCP) — Sistema A ===
+  servidor                                        pkt_ev      B_ev     B_rep    B_neto   escr_neto
+  mysql:3306 (127.0.0.1.3306)                         86     86742     86742         0           0
+  redis:6379 (127.0.0.1.6379)                         28       378       378         0           0
+  rabbitmq:5672 (204.168.203.32.5672)                 49      1858       168      1690           3
+  redis:6379 (204.168.203.32.6379)                    77      3188      1535      1653           7
+  user-management:8085 (204.168.203.32.8085)          47      3650      1578      2072           1
+  -----
+  Total evento: 95816 B | reposo: 90401 B | NETO atribuible al evento: 5415 B, 45 paquetes
+  Escrituras cliente->servidor netas (proxy de llamadas): 11
+  Servidores con tráfico neto > 0 (saltos): 3
+
+Evidencia: /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/ap5-A-1790733593-{reposo,evento}.{pcap,txt,agg}, /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/ap5-A-1790733593.log, /c/Users/adria/Escritorio/TESIS/go-tesis-infra/chaos/results/ap5-A-1790733593-summary.env
+Declarar al reportar: evento elegido, sistema en reposo (si), duración (30s x 2).
